@@ -6,11 +6,15 @@ Sınıf Rota, öğretmenlerin okul sınıflarında ödev, defter, kitap, materya
 
 - Ana Sayfa → Sınıf → Hızlı Kontrol → Kaydet → Öğrenci İstatistiği
 - Sınıf ve öğrenci ekleme, düzenleme ve silme
+- Öğrenci numarası düzenleme ve sınıf içinde numara çakışmasını önleme
+- İlişkili geçmiş kayıtlarını da kapsayan iki aşamalı güvenli silme
 - Ödev, Defter, Kitap ve Materyal kontrolleri
 - Yeni kontrolde bütün öğrencileri varsayılan olarak `✓ Tam` başlatma
 - `✓`, `~`, `×` ve `G` durumları için canlı özet
 - `G — Gelmedi` kayıtlarını başarı oranının paydasından çıkarma
 - Cihaz üzerinde yerel veri saklama
+- Bozuk veya uyumsuz yerel veriye karşı güvenli başlangıç
+- Kaydedilmemiş hızlı kontrolden çıkarken veri kaybı uyarısı
 - Telefon ve tablet uyumlu arayüz
 
 ## Teknoloji

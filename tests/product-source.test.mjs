@@ -27,4 +27,26 @@ test("eski yerel veriler marka değişiminden sonra okunabilir", async () => {
   const storage = await read("app/lib/storage.ts");
   assert.match(storage, /sinif-rota-prototype-v1/);
   assert.match(storage, /okul-takip-prototype-v1/);
+  assert.match(storage, /function isAppData/);
+});
+
+test("öğrenci numarası çakışmaları ve silme sonrası yeni numara güvenli yönetilir", async () => {
+  const data = await read("app/lib/data.ts");
+  const page = await read("app/page.tsx");
+  assert.match(data, /Math\.max\(highest, student\.number\)/);
+  assert.match(data, /studentNumberExists/);
+  assert.match(page, /Bu öğrenci numarası zaten kullanılıyor/);
+});
+
+test("sınıf ve öğrenci silme geçmişteki ilişkili verileri de temizler", async () => {
+  const data = await read("app/lib/data.ts");
+  const page = await read("app/page.tsx");
+  assert.match(data, /sessions\.filter\(\(session\) => session\.classId !== classId\)/);
+  assert.match(data, /const \{ \[studentId\]: _removed, \.\.\.statuses \}/);
+  assert.match(page, /Silme işlemini onayla/);
+});
+
+test("kaydedilmemiş hızlı kontrolden çıkış kullanıcıya sorulur", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /Kaydedilmemiş kontrol silinsin mi\?/);
 });

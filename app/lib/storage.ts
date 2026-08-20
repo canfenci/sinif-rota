@@ -1,20 +1,37 @@
 import { seedData } from "./seed";
-import type { AppData } from "./types";
+import type { AppData, CheckStatus, CheckType } from "./types";
 
 const STORAGE_KEY = "sinif-rota-prototype-v1";
 const LEGACY_STORAGE_KEY = "okul-takip-prototype-v1";
 export interface DataRepository { load(): AppData; save(data: AppData): void; }
+
+function isAppData(value: unknown): value is AppData {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<AppData>;
+  const types: CheckType[] = ["Ödev", "Defter", "Kitap", "Materyal"];
+  const statuses: CheckStatus[] = ["complete", "partial", "missing", "absent"];
+  return Array.isArray(candidate.classes) && Array.isArray(candidate.sessions)
+    && candidate.classes.every((item) => item && typeof item.id === "string" && typeof item.name === "string" && Array.isArray(item.students)
+      && item.students.every((student) => student && typeof student.id === "string" && typeof student.name === "string" && Number.isInteger(student.number)))
+    && candidate.sessions.every((session) => session && typeof session.id === "string" && typeof session.classId === "string"
+      && typeof session.className === "string" && types.includes(session.type) && !Number.isNaN(Date.parse(session.date))
+      && session.statuses && typeof session.statuses === "object" && Object.values(session.statuses).every((status) => statuses.includes(status)));
+}
 
 export const localRepository: DataRepository = {
   load() {
     if (typeof window === "undefined") return seedData;
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : seedData;
+      if (!saved) return seedData;
+      const parsed: unknown = JSON.parse(saved);
+      return isAppData(parsed) ? parsed : seedData;
     }
     catch { return seedData; }
   },
   save(data) {
-    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if (typeof window === "undefined") return;
+    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+    catch { /* Depolama dolu veya kullanılamıyorsa arayüz çalışmaya devam eder. */ }
   },
 };
