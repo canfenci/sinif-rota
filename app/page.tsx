@@ -4,13 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Sheet } from "./components/Sheet";
 import { StatusSelector } from "./components/StatusSelector";
 import { StudentImport } from "./components/StudentImport";
+import { AnnualPlan } from "./components/AnnualPlan";
 import { activeStudentCount, applyBulkStudentAction, classNameExists, duplicateClass, nextStudentNumber, removeClass, removeStudent, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
 import { seedData } from "./lib/seed";
 import { checkTypes, studentStats } from "./lib/stats";
 import { localRepository } from "./lib/storage";
+import { createDefaultWorkCalendar, updateAnnualPlanEntry } from "./lib/planning";
 import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./lib/types";
 
-type View = "home" | "classes" | "class" | "quick" | "student" | "import";
+type View = "home" | "classes" | "class" | "quick" | "student" | "import" | "plan";
 type EditTarget = { kind: "class"; item?: SchoolClass } | { kind: "student"; item?: Student };
 type BulkRequest = { action: BulkStudentAction; studentIds: string[] };
 
@@ -45,6 +47,7 @@ export default function Home() {
   const activeClasses = data.classes.filter((item) => !item.archived);
   const student = schoolClass?.students.find((item) => item.id === studentId);
   const recent = [...data.sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  const workCalendar = data.workCalendar ?? createDefaultWorkCalendar();
   const counts = useMemo(() => statuses ? Object.values(statuses).reduce((acc, value) => ({ ...acc, [value]: acc[value] + 1 }), { complete: 0, partial: 0, missing: 0, absent: 0 }) : null, [statuses]);
 
   function navigate(next: View) { setView(next); if (next !== "quick") setStatuses(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -165,8 +168,9 @@ export default function Home() {
     {view === "quick" && <QuickView classes={activeClasses} classId={classId} type={checkType} statuses={statuses} counts={counts} onClass={setClassId} onType={setCheckType} onStart={startCheck} onChange={(id, status) => setStatuses((current) => current ? { ...current, [id]: status } : current)} onBack={leaveQuickCheck} onSave={saveCheck} />}
     {view === "student" && student && <StudentView student={student} schoolClass={schoolClass} sessions={data.sessions} onBack={() => navigate("class")} />}
     {view === "import" && schoolClass && <StudentImport schoolClass={schoolClass} onBack={() => navigate("class")} onImport={importStudents} />}
+    {view === "plan" && <AnnualPlan classes={activeClasses} calendar={workCalendar} entries={data.annualPlanEntries ?? []} onCalendar={(calendar) => setData((current) => ({ ...current, workCalendar: calendar }))} onEntry={(targetClassId, weekStart, patch) => setData((current) => updateAnnualPlanEntry(current, targetClassId, workCalendar, weekStart, patch, () => crypto.randomUUID()))} onNotify={showToast} />}
 
-    {view !== "quick" && view !== "student" && view !== "import" && <nav className="bottom-nav" aria-label="Ana menü"><button className={view === "home" ? "nav-active" : ""} onClick={() => navigate("home")}>Ana Sayfa</button><button className={view !== "home" ? "nav-active" : ""} onClick={() => navigate("classes")}>Sınıflar</button></nav>}
+    {view !== "quick" && view !== "student" && view !== "import" && <nav className="bottom-nav" aria-label="Ana menü"><button className={view === "home" ? "nav-active" : ""} onClick={() => navigate("home")}>Ana Sayfa</button><button className={view === "classes" || view === "class" ? "nav-active" : ""} onClick={() => navigate("classes")}>Sınıflar</button><button className={view === "plan" ? "nav-active" : ""} onClick={() => navigate("plan")}>Yıllık Plan</button></nav>}
     {editTarget && <Sheet title={`${editTarget.item ? "Düzenle" : "Yeni"} ${editTarget.kind === "class" ? "sınıf" : "öğrenci"}`} onClose={() => setEditTarget(null)}><div className="form-stack"><label>Adı<input data-autofocus value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={editTarget.kind === "class" ? "Örn. 5-F" : "Ad Soyad"} onKeyDown={(event) => event.key === "Enter" && saveEdit()} /></label>{editTarget.kind === "student" && <label>Okul numarası<input inputMode="numeric" min="1" max="999" type="number" value={draftNumber} onChange={(event) => setDraftNumber(event.target.value)} onKeyDown={(event) => event.key === "Enter" && saveEdit()} /></label>}<button className="primary-action" onClick={saveEdit}>Kaydet <span>→</span></button>{editTarget.kind === "class" && editTarget.item && <div className="class-record-actions"><button type="button" onClick={duplicateSelectedClass}>Sınıfı çoğalt</button><button type="button" onClick={toggleClassArchive}>{editTarget.item.archived ? "Arşivden çıkar" : "Sınıfı arşivle"}</button></div>}{editTarget.item && <>{deleteArmed && <p className="delete-warning">Bu işlem ilgili geçmiş kayıtları da kalıcı olarak siler.</p>}<button className={`danger-action ${deleteArmed ? "danger-confirm" : ""}`} onClick={deleteTarget}>{deleteArmed ? "Silme işlemini onayla" : "Kaydı sil"}</button></>}</div></Sheet>}
     {bulkRequest && schoolClass && <BulkActionSheet request={bulkRequest} source={schoolClass} classes={activeClasses} onClose={() => setBulkRequest(null)} onConfirm={runBulkAction} />}
     {toast && <div className="toast" role="status"><span>✓ {toast}</span>{undoSnapshot && <button type="button" onClick={undoLast}>Geri al</button>}</div>}

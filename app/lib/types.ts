@@ -11,4 +11,20 @@ export interface CheckSession {
   date: string;
   statuses: Record<string, CheckStatus>;
 }
-export interface AppData { classes: SchoolClass[]; sessions: CheckSession[]; }
+export interface CalendarBreak { id: string; title: string; startDate: string; endDate: string; }
+export interface WorkCalendar { schoolYear: string; startDate: string; endDate: string; breaks: CalendarBreak[]; }
+export interface AnnualPlanEntry {
+  id: string;
+  classId: string;
+  schoolYear: string;
+  weekStart: string;
+  topic: string;
+  note: string;
+  completed: boolean;
+}
+export interface AppData {
+  classes: SchoolClass[];
+  sessions: CheckSession[];
+  workCalendar?: WorkCalendar;
+  annualPlanEntries?: AnnualPlanEntry[];
+}

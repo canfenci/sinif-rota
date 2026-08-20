@@ -16,6 +16,11 @@ Sınıf Rota, öğretmenlerin okul sınıflarında ödev, defter, kitap, materya
 - Öğrencileri aktif veya pasif yapma; pasif öğrencileri yeni kontrollerden çıkarma
 - Sınıf çoğaltma ve arşivleme
 - Toplu işlemlerde önizleme, numara çakışması kontrolü ve geri alma
+- Düzenlenebilir eğitim yılı başlangıç ve bitiş tarihleriyle iş takvimi
+- Tatil ve ders yapılmayan dönemleri iş günü hesabından çıkarma
+- İş takviminden otomatik oluşturulan hafta hafta yıllık plan
+- Her sınıf için haftalık konu/kazanım, öğretmen notu ve tamamlanma takibi
+- Planlanan, tamamlanan ve konu girilmeyen haftaları filtreleme
 - Öğrenci numarası düzenleme ve sınıf içinde numara çakışmasını önleme
 - İlişkili geçmiş kayıtlarını da kapsayan iki aşamalı güvenli silme
 - Ödev, Defter, Kitap ve Materyal kontrolleri

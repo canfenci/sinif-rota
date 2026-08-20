@@ -9,7 +9,7 @@ export function Sheet({ title, children, onClose }: { title: string; children: R
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
-    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>("button, input, select, [tabindex]:not([tabindex='-1'])") ?? []).filter((item) => !item.hasAttribute("disabled"));
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>("button, input, select, textarea, [tabindex]:not([tabindex='-1'])") ?? []).filter((item) => !item.hasAttribute("disabled"));
     (dialog?.querySelector<HTMLElement>("[data-autofocus]") ?? focusable()[0])?.focus();
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";

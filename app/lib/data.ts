@@ -17,8 +17,10 @@ export function studentNumberExists(students: Student[], number: number, exceptI
 
 export function removeClass(data: AppData, classId: string): AppData {
   return {
+    ...data,
     classes: data.classes.filter((item) => item.id !== classId),
     sessions: data.sessions.filter((session) => session.classId !== classId),
+    annualPlanEntries: data.annualPlanEntries?.filter((entry) => entry.classId !== classId),
   };
 }
 

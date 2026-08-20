@@ -81,3 +81,15 @@ test("pasif öğrenciler yeni hızlı kontrollere alınmaz", async () => {
   assert.match(page, /student\.active !== false/);
   assert.match(page, /Yalnızca aktif öğrenciler kontrole alınır/);
 });
+
+test("yıllık plan iş takviminden hafta hafta oluşturulur", async () => {
+  const page = await read("app/page.tsx");
+  const plan = await read("app/components/AnnualPlan.tsx");
+  const storage = await read("app/lib/storage.ts");
+  assert.match(page, />Yıllık Plan</);
+  assert.match(plan, /İŞ TAKVİMİNE GÖRE/);
+  assert.match(plan, /Takvimi düzenle/);
+  assert.match(plan, /Konu \/ kazanım/);
+  assert.match(plan, /Bu hafta tamamlandı/);
+  assert.match(storage, /annualPlanEntries/);
+});
