@@ -57,3 +57,12 @@ test("örnek tarihler sunucu ve istemcide aynı ISO değerini üretir", async ()
   assert.match(seed, /Date\.UTC\(/);
   assert.match(page, /timeZone: "Europe\/Istanbul"/);
 });
+
+test("sınıf ekranı Excel, XLS ve CSV aktarımını açar", async () => {
+  const page = await read("app/page.tsx");
+  const importer = await read("app/components/StudentImport.tsx");
+  assert.match(page, /Dosyadan aktar/);
+  assert.match(importer, /accept="\.xlsx,\.xls,\.csv/);
+  assert.match(importer, /Öğrencileri aktar/);
+  assert.match(importer, /Örnek Excel şablonunu indir/);
+});

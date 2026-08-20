@@ -6,6 +6,11 @@ Sınıf Rota, öğretmenlerin okul sınıflarında ödev, defter, kitap, materya
 
 - Ana Sayfa → Sınıf → Hızlı Kontrol → Kaydet → Öğrenci İstatistiği
 - Sınıf ve öğrenci ekleme, düzenleme ve silme
+- XLSX, XLS ve CSV dosyalarından önizlemeli öğrenci aktarımı
+- Otomatik başlık/sütun algılama ve ayrı ad-soyad sütunlarını birleştirme
+- Aktarımda hatalı ve tekrarlanan okul numaralarını işaretleme
+- Mevcut öğrencileri atlama veya adını güncelleme seçeneği
+- İndirilebilir örnek Excel şablonu
 - Öğrenci numarası düzenleme ve sınıf içinde numara çakışmasını önleme
 - İlişkili geçmiş kayıtlarını da kapsayan iki aşamalı güvenli silme
 - Ödev, Defter, Kitap ve Materyal kontrolleri
