@@ -11,6 +11,11 @@ Sınıf Rota, öğretmenlerin okul sınıflarında ödev, defter, kitap, materya
 - Aktarımda hatalı ve tekrarlanan okul numaralarını işaretleme
 - Mevcut öğrencileri atlama veya adını güncelleme seçeneği
 - İndirilebilir örnek Excel şablonu
+- Öğrenci arama; ada veya okul numarasına göre sıralama
+- Çoklu öğrenci seçimi ve toplu taşıma, kopyalama, silme
+- Öğrencileri aktif veya pasif yapma; pasif öğrencileri yeni kontrollerden çıkarma
+- Sınıf çoğaltma ve arşivleme
+- Toplu işlemlerde önizleme, numara çakışması kontrolü ve geri alma
 - Öğrenci numarası düzenleme ve sınıf içinde numara çakışmasını önleme
 - İlişkili geçmiş kayıtlarını da kapsayan iki aşamalı güvenli silme
 - Ödev, Defter, Kitap ve Materyal kontrolleri

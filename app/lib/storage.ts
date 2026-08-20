@@ -12,7 +12,8 @@ function isAppData(value: unknown): value is AppData {
   const statuses: CheckStatus[] = ["complete", "partial", "missing", "absent"];
   return Array.isArray(candidate.classes) && Array.isArray(candidate.sessions)
     && candidate.classes.every((item) => item && typeof item.id === "string" && typeof item.name === "string" && Array.isArray(item.students)
-      && item.students.every((student) => student && typeof student.id === "string" && typeof student.name === "string" && Number.isInteger(student.number)))
+      && (item.archived == null || typeof item.archived === "boolean")
+      && item.students.every((student) => student && typeof student.id === "string" && typeof student.name === "string" && Number.isInteger(student.number) && (student.active == null || typeof student.active === "boolean")))
     && candidate.sessions.every((session) => session && typeof session.id === "string" && typeof session.classId === "string"
       && typeof session.className === "string" && types.includes(session.type) && !Number.isNaN(Date.parse(session.date))
       && session.statuses && typeof session.statuses === "object" && Object.values(session.statuses).every((status) => statuses.includes(status)));

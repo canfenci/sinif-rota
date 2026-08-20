@@ -11,9 +11,9 @@ test("Sınıf Rota marka metadatasını yayımlar", async () => {
   assert.doesNotMatch(layout, /Okul Takip/);
 });
 
-test("hızlı kontrol bütün öğrencileri Tam durumuyla başlatır", async () => {
+test("hızlı kontrol aktif öğrencileri Tam durumuyla başlatır", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, /schoolClass\.students\.map\(\(person\) => \[person\.id, "complete"\]\)/);
+  assert.match(page, /activeStudents\.map\(\(person\) => \[person\.id, "complete"\]\)/);
   assert.match(page, /Kontrolü Kaydet/);
 });
 
@@ -65,4 +65,19 @@ test("sınıf ekranı Excel, XLS ve CSV aktarımını açar", async () => {
   assert.match(importer, /accept="\.xlsx,\.xls,\.csv/);
   assert.match(importer, /Öğrencileri aktar/);
   assert.match(importer, /Örnek Excel şablonunu indir/);
+});
+
+test("sınıf ekranı arama, çoklu seçim, arşivleme ve geri alma sunar", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /placeholder="Öğrenci ara"/);
+  assert.match(page, /Görünenleri seç/);
+  assert.match(page, /Sınıfı çoğalt/);
+  assert.match(page, /Sınıfı arşivle/);
+  assert.match(page, />Geri al</);
+});
+
+test("pasif öğrenciler yeni hızlı kontrollere alınmaz", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /student\.active !== false/);
+  assert.match(page, /Yalnızca aktif öğrenciler kontrole alınır/);
 });
