@@ -7,12 +7,12 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
   const image = `${protocol}://${host}/og.png`;
-  const title = "Okul Takip — Hızlı sınıf kontrolü";
+  const title = "Sınıf Rota — Hızlı sınıf kontrolü";
   const description = "Öğretmenler için minimum dokunuşla hızlı ödev, defter, kitap ve materyal takibi.";
   return {
     title,
     description,
-    openGraph: { title, description, images: [{ url: image, width: 1536, height: 912, alt: "Okul Takip" }] },
+    openGraph: { title, description, images: [{ url: image, width: 1536, height: 912, alt: "Sınıf Rota" }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }

@@ -10,7 +10,6 @@ import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./li
 
 type View = "home" | "classes" | "class" | "quick" | "student";
 type EditTarget = { kind: "class"; item?: SchoolClass } | { kind: "student"; item?: Student };
-const statusLabels: Record<CheckStatus, string> = { complete: "Tam", partial: "Eksik", missing: "Yok", absent: "Gelmedi" };
 
 export default function Home() {
   const [data, setData] = useState<AppData>(seedData);
@@ -24,7 +23,13 @@ export default function Home() {
   const [draftName, setDraftName] = useState("");
   const [toast, setToast] = useState("");
 
-  useEffect(() => { setData(localRepository.load()); setReady(true); }, []);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setData(localRepository.load());
+      setReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   useEffect(() => { if (ready) localRepository.save(data); }, [data, ready]);
 
   const schoolClass = data.classes.find((item) => item.id === classId) ?? data.classes[0];
@@ -74,13 +79,13 @@ export default function Home() {
     {view === "student" && student && <StudentView student={student} schoolClass={schoolClass} sessions={data.sessions} onBack={() => navigate("class")} />}
 
     {view !== "quick" && view !== "student" && <nav className="bottom-nav" aria-label="Ana menü"><button className={view === "home" ? "nav-active" : ""} onClick={() => navigate("home")}>Ana Sayfa</button><button className={view !== "home" ? "nav-active" : ""} onClick={() => navigate("classes")}>Sınıflar</button></nav>}
-    {editTarget && <Sheet title={`${editTarget.item ? "Düzenle" : "Yeni"} ${editTarget.kind === "class" ? "sınıf" : "öğrenci"}`} onClose={() => setEditTarget(null)}><div className="form-stack"><label>Adı<input autoFocus value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={editTarget.kind === "class" ? "Örn. 5-F" : "Ad Soyad"} onKeyDown={(event) => event.key === "Enter" && saveEdit()} /></label><button className="primary-action" onClick={saveEdit}>Kaydet <span>→</span></button>{editTarget.item && <button className="danger-action" onClick={deleteTarget}>Kaydı sil</button>}</div></Sheet>}
+    {editTarget && <Sheet title={`${editTarget.item ? "Düzenle" : "Yeni"} ${editTarget.kind === "class" ? "sınıf" : "öğrenci"}`} onClose={() => setEditTarget(null)}><div className="form-stack"><label>Adı<input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={editTarget.kind === "class" ? "Örn. 5-F" : "Ad Soyad"} onKeyDown={(event) => event.key === "Enter" && saveEdit()} /></label><button className="primary-action" onClick={saveEdit}>Kaydet <span>→</span></button>{editTarget.item && <button className="danger-action" onClick={deleteTarget}>Kaydı sil</button>}</div></Sheet>}
     {toast && <div className="toast" role="status">✓ {toast}</div>}
   </main>;
 }
 
 function AppHeader({ eyebrow, title, back }: { eyebrow: string; title: string; back?: () => void }) {
-  return <header className="page-header">{back ? <button className="back-button" onClick={back} aria-label="Geri">←</button> : <div className="brand-mark">O</div>}<div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1></div></header>;
+  return <header className="page-header">{back ? <button className="back-button" onClick={back} aria-label="Geri">←</button> : <div className="brand-mark" aria-label="Sınıf Rota">SR</div>}<div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1></div></header>;
 }
 
 function HomeView({ classes, recent, onQuick, onClass }: { classes: SchoolClass[]; recent: AppData["sessions"]; onQuick: () => void; onClass: (id: string) => void }) {
