@@ -29,7 +29,7 @@ const sessions: CheckSession[] = Array.from({ length: 12 }, (_, sessionIndex) =>
     classId: schoolClass.id,
     className: schoolClass.name,
     type: types[sessionIndex % types.length],
-    date: new Date(2026, 7, 19 - sessionIndex).toISOString(),
+    date: new Date(Date.UTC(2026, 7, 19 - sessionIndex, 9)).toISOString(),
     statuses: Object.fromEntries(schoolClass.students.map((student, index) => [student.id, statusFor(index, sessionIndex)])),
   };
 });

@@ -50,3 +50,10 @@ test("kaydedilmemiş hızlı kontrolden çıkış kullanıcıya sorulur", async 
   const page = await read("app/page.tsx");
   assert.match(page, /Kaydedilmemiş kontrol silinsin mi\?/);
 });
+
+test("örnek tarihler sunucu ve istemcide aynı ISO değerini üretir", async () => {
+  const seed = await read("app/lib/seed.ts");
+  const page = await read("app/page.tsx");
+  assert.match(seed, /Date\.UTC\(/);
+  assert.match(page, /timeZone: "Europe\/Istanbul"/);
+});
