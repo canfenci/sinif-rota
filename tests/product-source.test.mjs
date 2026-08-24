@@ -93,3 +93,11 @@ test("yıllık plan iş takviminden hafta hafta oluşturulur", async () => {
   assert.match(plan, /Bu hafta tamamlandı/);
   assert.match(storage, /annualPlanEntries/);
 });
+
+test("mobil görünüm dokunma, dialog ve safe-area sınırlarını korur", async () => {
+  const css = await read("app/globals.css");
+  assert.match(css, /\.sheet\{max-height:calc\(100dvh - 12px\);overflow-y:auto/);
+  assert.match(css, /\.bulk-dock button\{min-width:44px;min-height:44px\}/);
+  assert.match(css, /\.status-button\{width:44px;height:44px\}/);
+  assert.match(css, /env\(safe-area-inset-bottom\)/);
+});
