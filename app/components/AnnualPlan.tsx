@@ -23,12 +23,12 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
   const [entryDraft, setEntryDraft] = useState<EntryDraft | null>(null);
   const selectedClass = classes.find((item) => item.id === classId) ?? classes[0];
   const selectedClassId = selectedClass?.id ?? "";
-  const weeks = useMemo(() => buildPlanWeeks(calendar), [calendar]);
   const sciencePlan = useMemo(() => selectedClass ? buildSciencePlanForClass(selectedClass.name, calendar) : null, [calendar, selectedClass]);
+  const weeks = useMemo(() => buildPlanWeeks(calendar, sciencePlan?.grade), [calendar, sciencePlan?.grade]);
   const scienceByWeek = new Map(sciencePlan?.weeks.map((week) => [week.weekStart, week]) ?? []);
   const planEntries = entries.filter((item) => item.classId === selectedClassId && item.schoolYear === calendar.schoolYear);
   const byWeek = new Map(planEntries.map((item) => [item.weekStart, item]));
-  const teachable = weeks.filter((week) => week.teachingDays > 0);
+  const teachable = weeks.filter((week) => week.teachingDays > 0 || scienceByWeek.has(week.startDate));
   const completed = teachable.filter((week) => byWeek.get(week.startDate)?.completed).length;
   const planned = teachable.filter((week) => byWeek.get(week.startDate)?.topic || scienceByWeek.has(week.startDate)).length;
   const visible = weeks.filter((week) => {
@@ -36,7 +36,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
     const hasPlan = Boolean(entry?.topic) || scienceByWeek.has(week.startDate);
     if (filter === "planned") return hasPlan && !entry?.completed;
     if (filter === "completed") return Boolean(entry?.completed);
-    if (filter === "empty") return week.teachingDays > 0 && !hasPlan;
+    if (filter === "empty") return (week.teachingDays > 0 || scienceByWeek.has(week.startDate)) && !hasPlan;
     return true;
   });
 
@@ -58,7 +58,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       <section className="plan-summary">
         <div><p className="kicker">İŞ TAKVİMİNE GÖRE</p><h2>Hafta hafta<br />ders akışı.</h2></div>
         <button type="button" onClick={() => setCalendarOpen(true)}>Takvimi düzenle</button>
-        {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 134 saat MEB programı + 2 saat öğretmen planlama süresi" : "Haftada 4 saat · 138 saat MEB programı · 136 saat gerçek kapasite"}</span><small>{sciencePlan.grade === 6 ? "7. ünite 16 saat · " : ""}1. dönem 68 saat · 2. dönem 68 saat</small></div>}
+        {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 4 saat laboratuvar güvenliği + 136 saat öğrenme çıktıları" : "Haftada 4 saat · 138 saat MEB programı · 136 saat gerçek kapasite"}</span><small>{sciencePlan.grade === 5 ? "Toplam 140 saat · 1. dönem 68 saat · 2. dönem 72 saat" : "7. ünite 16 saat · 1. dönem 68 saat · 2. dönem 68 saat"}</small></div>}
         <dl><div><dt>Planlanan</dt><dd>{planned}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>Tamamlanan</dt><dd>{completed}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>{sciencePlan ? "Ders saati" : "İş günü"}</dt><dd>{sciencePlan ? sciencePlan.totalHours : teachable.reduce((sum, week) => sum + week.teachingDays, 0)}</dd></div></dl>
       </section>
       <div className="plan-controls">
@@ -68,7 +68,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       <div className="calendar-note"><strong>{fullDate.format(asDate(calendar.startDate))} – {fullDate.format(asDate(calendar.endDate))}</strong><span>Başlangıç, bitiş ve tatil dönemleri iş takviminden hesaplanır.</span></div>
       <section className="week-list" aria-label={`${selectedClass?.name} yıllık planı`}>
         {visible.map((week) => {
-          const entry = byWeek.get(week.startDate); const automatic = scienceByWeek.get(week.startDate); const closed = week.teachingDays === 0;
+          const entry = byWeek.get(week.startDate); const automatic = scienceByWeek.get(week.startDate); const closed = week.teachingDays === 0 && !automatic;
           return <article className={`week-row ${closed ? "week-closed" : ""} ${entry?.completed ? "week-completed" : ""}`} key={week.startDate}>
             <button type="button" onClick={() => !closed && openWeek(week)} disabled={closed}>
               <span className="week-number">{String(week.number).padStart(2, "0")}</span>
@@ -81,12 +81,29 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       </section>
     </>}
     {calendarOpen && <CalendarSheet value={calendar} onClose={() => setCalendarOpen(false)} onSave={(next) => { onCalendar(next); setCalendarOpen(false); onNotify("İş takvimi güncellendi"); }} />}
-    {entryDraft && <Sheet title={`${entryDraft.week.number}. hafta planı`} onClose={() => setEntryDraft(null)}><div className="week-form"><p>{fullDate.format(asDate(entryDraft.week.startDate))} – {fullDate.format(asDate(entryDraft.week.endDate))} · {entryDraft.week.teachingDays} iş günü</p><label>Konu / kazanım<textarea data-autofocus rows={3} value={entryDraft.topic} onChange={(event) => setEntryDraft({ ...entryDraft, topic: event.target.value })} placeholder="Bu hafta işlenecek konu" /></label><label>Öğretmen notu<textarea rows={3} value={entryDraft.note} onChange={(event) => setEntryDraft({ ...entryDraft, note: event.target.value })} placeholder="İsteğe bağlı not" /></label><label className="complete-check"><input type="checkbox" checked={entryDraft.completed} onChange={(event) => setEntryDraft({ ...entryDraft, completed: event.target.checked })} /> Bu hafta tamamlandı</label><button className="primary-action" type="button" onClick={saveWeek}>Haftayı kaydet <span>→</span></button></div></Sheet>}
+    {entryDraft && <Sheet title={`${entryDraft.week.number}. hafta planı`} onClose={() => setEntryDraft(null)}><div className="week-form"><p>{fullDate.format(asDate(entryDraft.week.startDate))} – {fullDate.format(asDate(entryDraft.week.endDate))} · {entryDraft.week.teachingDays} iş günü</p>{scienceByWeek.get(entryDraft.week.startDate) && <ScienceDetailCards items={scienceByWeek.get(entryDraft.week.startDate)!.items} className={selectedClass?.name ?? "—"} week={entryDraft.week} />}<div className="manual-plan-editor"><strong>Manuel plan / öğretmen kaydı</strong><small>Buradaki değişiklik otomatik planı silmez; bu hafta için manuel görünüm olarak saklanır.</small></div><label>Konu / kazanım<textarea data-autofocus rows={3} value={entryDraft.topic} onChange={(event) => setEntryDraft({ ...entryDraft, topic: event.target.value })} placeholder="Bu hafta işlenecek konu" /></label><label>Öğretmen notu<textarea rows={3} value={entryDraft.note} onChange={(event) => setEntryDraft({ ...entryDraft, note: event.target.value })} placeholder="İsteğe bağlı not" /></label><label className="complete-check"><input type="checkbox" checked={entryDraft.completed} onChange={(event) => setEntryDraft({ ...entryDraft, completed: event.target.checked })} /> Bu hafta tamamlandı</label><button className="primary-action" type="button" onClick={saveWeek}>Haftayı kaydet <span>→</span></button></div></Sheet>}
   </>;
 }
 
 function ScienceWeekItems({ items }: { items: SciencePlanItem[] }) {
   return <span className="science-week-items">{items.map((item, index) => <span key={`${item.unit}-${item.outcomeCode ?? item.title}-${index}`}><strong>{item.title}</strong><b>{item.hours} saat</b>{item.badge && <em>{item.badge}</em>}</span>)}</span>;
+}
+
+const detailSections: Array<[keyof NonNullable<SciencePlanItem["curriculum"]>, string]> = [
+  ["processComponents", "Süreç Bileşenleri"], ["contentFramework", "İçerik Çerçevesi"], ["keyConcepts", "Anahtar Kavramlar"], ["learningEvidence", "Öğrenme Kanıtları"], ["learningTeachingExperiences", "Öğrenme-Öğretme Yaşantıları"], ["differentiation", "Farklılaştırma"],
+];
+
+function ScienceDetailCards({ items, className, week }: { items: SciencePlanItem[]; className: string; week: PlanWeek }) {
+  return <section className="science-detail-list" aria-label="Haftanın öğrenme çıktıları">{items.map((item, index) => {
+    const allocation = item.allocation;
+    const curriculum = item.curriculum;
+    const skills = curriculum ? [...curriculum.skills, ...curriculum.values, ...curriculum.literacySkills] : [];
+    return <article className="science-detail-card" key={`${item.outcomeCode ?? item.title}-${index}`}>
+      <header><span>{item.unit === 0 ? "Hazırlık" : `${item.unit}. Ünite`}</span><strong>{item.outcomeCode ?? item.title}</strong></header>
+      <dl><div><dt>Hafta</dt><dd>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))}</dd></div><div><dt>Sınıf</dt><dd>{className}</dd></div><div><dt>Ünite</dt><dd>{item.unitTitle}</dd></div><div><dt>Öğrenme çıktısı</dt><dd>{item.outcomeCode ?? "—"}</dd></div><div className="detail-wide"><dt>Resmî açıklama</dt><dd>{curriculum?.officialDescription ?? "Kaynak açıklaması henüz eklenmedi."}</dd></div><div><dt>Bu hafta</dt><dd>{allocation.allocatedHours} saat</dd></div><div><dt>Toplam plan</dt><dd>{allocation.plannedTotalHours} saat</dd></div><div><dt>Önce işlenen</dt><dd>{allocation.completedBeforeHours} saat</dd></div><div><dt>Hafta sonu</dt><dd>{allocation.completedAfterHours} saat</dd></div></dl>
+      {curriculum && <div className="science-detail-accordions">{detailSections.map(([key, label]) => <details key={key}><summary>{label}</summary><p>{(curriculum[key] as string[]).join(" · ") || "Kaynak verisi eklenmedi."}</p></details>)}<details><summary>Beceri / Değer / Okuryazarlık</summary><p>{skills.join(" · ") || "Kaynak verisi eklenmedi."}</p></details></div>}
+    </article>;
+  })}</section>;
 }
 
 function CalendarSheet({ value, onClose, onSave }: { value: WorkCalendar; onClose: () => void; onSave: (calendar: WorkCalendar) => void }) {

@@ -56,44 +56,92 @@ test("2026-2027 varsayılan takvimi resmî dönem ve tatil tarihlerini içerir",
   ]);
 });
 
-test("5. sınıf Fen Bilimleri planı iki döneme 68'er saat dağıtılır", () => {
+test("5. sınıf Fen Bilimleri planı 68 + 72 olmak üzere toplam 140 saattir", () => {
   const result = logic.buildGrade5SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
   assert.ok(result);
-  assert.equal(result.weeks.length, 34);
+  assert.equal(result.weeks.length, 35);
   assert.equal(result.weeks.filter((week) => week.term === 1).length, 17);
-  assert.equal(result.weeks.filter((week) => week.term === 2).length, 17);
-  assert.deepEqual(result.weeks.map((week) => week.totalHours), Array(34).fill(4));
+  assert.equal(result.weeks.filter((week) => week.term === 2).length, 18);
+  assert.deepEqual(result.weeks.map((week) => week.totalHours), Array(35).fill(4));
   assert.equal(result.weeks.filter((week) => week.term === 1).reduce((sum, week) => sum + week.totalHours, 0), 68);
-  assert.equal(result.weeks.filter((week) => week.term === 2).reduce((sum, week) => sum + week.totalHours, 0), 68);
-  assert.deepEqual({ curriculum: result.curriculumHours, extra: result.capacityAdjustmentHours, capacity: result.totalHours }, { curriculum: 134, extra: 2, capacity: 136 });
+  assert.equal(result.weeks.filter((week) => week.term === 2).reduce((sum, week) => sum + week.totalHours, 0), 72);
+  assert.deepEqual({ curriculum: result.curriculumHours, adjustment: result.capacityAdjustmentHours, capacity: result.totalHours }, { curriculum: 140, adjustment: 0, capacity: 140 });
 });
 
-test("ünite toplamları ve iki özel öğrenme çıktısı korunur", () => {
+test("ilk hafta laboratuvar güvenliğidir ve 1. ünite 21 Eylül'de başlar", () => {
+  const result = logic.buildGrade5SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  assert.deepEqual(result.weeks[0].items.map((item) => [item.title, item.hours]), [["LABORATUVAR GÜVENLİĞİ VE LABORATUVAR KURALLARI", 4]]);
+  assert.equal(result.weeks[1].weekStart, "2026-09-21");
+  assert.deepEqual(result.weeks[1].items.map((item) => [item.outcomeCode, item.hours]), [["FB.5.1.1.1", 4]]);
+});
+
+test("5. sınıf ünite ve kritik öğrenme çıktısı süreleri aynen korunur", () => {
   const result = logic.buildGrade5SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
   const items = result.weeks.flatMap((week) => week.items);
   const unitHours = new Map();
   items.forEach((item) => unitHours.set(item.unit, (unitHours.get(item.unit) ?? 0) + item.hours));
-  assert.deepEqual([...unitHours.entries()], [[1, 22], [2, 26], [3, 22], [4, 14], [5, 26], [6, 16], [7, 10]]);
-  assert.equal(items.filter((item) => item.outcomeCode === "FB.5.2.3.2" && item.badge === "+ ek süre").reduce((sum, item) => sum + item.hours, 0), 2);
+  assert.deepEqual([...unitHours.entries()], [[0, 4], [1, 22], [2, 24], [3, 22], [4, 14], [5, 26], [6, 16], [7, 12]]);
+  assert.equal(items.filter((item) => item.outcomeCode === "FB.5.2.3.2").reduce((sum, item) => sum + item.hours, 0), 6);
   assert.equal(items.filter((item) => item.outcomeCode === "FB.5.3.2.2").reduce((sum, item) => sum + item.hours, 0), 2);
+  assert.equal(items.filter((item) => item.outcomeCode === "FB.5.7.1.3").reduce((sum, item) => sum + item.hours, 0), 4);
 });
 
-test("ikinci dönemin ilk haftası iki farklı içeriği aynı anda destekler", () => {
+test("5. sınıf öğrenme çıktılarının tüm saatleri pedagojik tabloyla aynıdır", () => {
+  const result = logic.buildGrade5SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const actual = new Map();
+  result.weeks.flatMap((week) => week.items).filter((item) => item.outcomeCode).forEach((item) => actual.set(item.outcomeCode, (actual.get(item.outcomeCode) ?? 0) + item.hours));
+  assert.deepEqual([...actual.entries()], [
+    ["FB.5.1.1.1", 8], ["FB.5.1.2.1", 4], ["FB.5.1.2.2", 6], ["FB.5.1.3.1", 4],
+    ["FB.5.2.1.1", 6], ["FB.5.2.1.2", 4], ["FB.5.2.2.1", 4], ["FB.5.2.3.1", 4], ["FB.5.2.3.2", 6],
+    ["FB.5.3.1.1", 6], ["FB.5.3.1.2", 6], ["FB.5.3.2.1", 8], ["FB.5.3.2.2", 2],
+    ["FB.5.4.1.1", 4], ["FB.5.4.2.1", 4], ["FB.5.4.3.1", 6],
+    ["FB.5.5.1.1", 4], ["FB.5.5.2.1", 4], ["FB.5.5.2.2", 4], ["FB.5.5.3.1", 6], ["FB.5.5.4.1", 4], ["FB.5.5.4.2", 4],
+    ["FB.5.6.1.1", 2], ["FB.5.6.1.2", 4], ["FB.5.6.2.1", 4], ["FB.5.6.2.2", 6],
+    ["FB.5.7.1.1", 4], ["FB.5.7.1.2", 4], ["FB.5.7.1.3", 4],
+  ]);
+});
+
+test("tüm 5. sınıf öğrenme çıktıları verilen sırada dağıtılır", () => {
+  const result = logic.buildGrade5SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const actual = [...new Set(result.weeks.flatMap((week) => week.items).map((item) => item.outcomeCode).filter(Boolean))];
+  assert.deepEqual(actual, logic.grade5ScienceCurriculum.map((item) => item.code));
+  assert.equal(logic.grade5ScienceCurriculum.every((item) => item.officialDescription === null && item.officialSource === null), true);
+});
+
+test("8 Şubat haftası FB.5.3.2.1 ve FB.5.3.2.2 için 2+2 geçişidir", () => {
   const result = logic.buildGrade5SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
   const firstWeek = result.weeks.find((week) => week.weekStart === "2027-02-08");
-  assert.deepEqual(firstWeek.items.map((item) => [item.outcomeCode ?? item.unit, item.hours]), [["FB.5.3.2.2", 2], [4, 2]]);
+  assert.deepEqual(firstWeek.items.map((item) => [item.outcomeCode, item.hours]), [["FB.5.3.2.1", 2], ["FB.5.3.2.2", 2]]);
+  assert.deepEqual(firstWeek.items.map((item) => [item.allocation.completedBeforeHours, item.allocation.completedAfterHours]), [[6, 8], [0, 2]]);
 });
 
-test("Sosyal Etkinlik Haftalarına normal Fen içeriği atanmaz", () => {
+test("dağıtım motoru 2+2 ve 3+1 hafta içi geçişlerini destekler", () => {
+  assert.deepEqual(logic.distributeHoursToWeeks([2, 2]), [[2, 2]]);
+  assert.deepEqual(logic.distributeHoursToWeeks([3, 1]), [[3, 1]]);
+  assert.deepEqual(logic.distributeHoursToWeeks([1, 3]), [[1, 3]]);
+});
+
+test("5. sınıfta Ocak ve son hafta sosyal, 14 Haziran normal Fen haftasıdır", () => {
   const calendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
-  const weeks = logic.buildPlanWeeks(calendar);
+  const weeks = logic.buildPlanWeeks(calendar, 5);
   const plan = logic.buildGrade5SciencePlan(calendar);
-  for (const weekStart of ["2027-01-18", "2027-06-14", "2027-06-21"]) {
+  for (const weekStart of ["2027-01-18", "2027-06-21"]) {
     const week = weeks.find((item) => item.startDate === weekStart);
     assert.equal(week.teachingDays, 0);
     assert.deepEqual(week.breakTitles, ["Sosyal Etkinlik Haftası"]);
     assert.equal(plan.weeks.some((item) => item.weekStart === weekStart), false);
   }
+  const june14 = weeks.find((item) => item.startDate === "2027-06-14");
+  assert.equal(june14.teachingDays, 5);
+  assert.deepEqual(plan.weeks.find((item) => item.weekStart === "2027-06-14").items.map((item) => [item.outcomeCode, item.hours]), [["FB.5.7.1.3", 4]]);
+});
+
+test("otomatik plan üretimi manuel planı ve iş takvimini değiştirmez", () => {
+  const workCalendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
+  const data = { classes: [], sessions: [], workCalendar, annualPlanEntries: [{ id: "manual-1", classId: "5-a", schoolYear: "2026-2027", weekStart: "2026-09-21", topic: "Öğretmen planı", note: "Korunmalı", completed: true }] };
+  const before = structuredClone(data);
+  logic.buildGrade5SciencePlan(workCalendar);
+  assert.deepEqual(data, before);
 });
 
 test("varsayılan Fen planı yalnız 5. sınıf ve 2026-2027 için etkinleşir", () => {

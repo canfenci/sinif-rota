@@ -102,4 +102,15 @@ test("mobil görünüm dokunma, dialog ve safe-area sınırlarını korur", asyn
   assert.match(css, /\.bulk-dock button\{min-width:44px;min-height:44px\}/);
   assert.match(css, /\.status-button\{width:44px;height:44px\}/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
+  assert.match(css, /@media\(max-width:380px\)\{\.science-detail-list,\.science-detail-card/);
+  assert.match(css, /overflow-wrap:anywhere/);
+});
+
+test("yıllık plan mobil detayında çıktı, süre ilerlemesi ve manuel kayıt ayrımı vardır", async () => {
+  const plan = await read("app/components/AnnualPlan.tsx");
+  assert.match(plan, /ScienceDetailCards/);
+  assert.match(plan, /Resmî açıklama/);
+  assert.match(plan, /Önce işlenen/);
+  assert.match(plan, /Hafta sonu/);
+  assert.match(plan, /Manuel plan \/ öğretmen kaydı/);
 });

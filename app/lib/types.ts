@@ -11,7 +11,7 @@ export interface CheckSession {
   date: string;
   statuses: Record<string, CheckStatus>;
 }
-export interface CalendarBreak { id: string; title: string; startDate: string; endDate: string; }
+export interface CalendarBreak { id: string; title: string; startDate: string; endDate: string; grades?: number[]; }
 export interface WorkCalendar { schoolYear: string; startDate: string; endDate: string; breaks: CalendarBreak[]; }
 export interface AnnualPlanEntry {
   id: string;
