@@ -1,8 +1,8 @@
 export type CheckType = "Ödev" | "Defter" | "Kitap" | "Materyal";
 export type CheckStatus = "complete" | "partial" | "missing" | "absent";
 
-export interface Student { id: string; name: string; number: number; active?: boolean; }
-export interface SchoolClass { id: string; name: string; students: Student[]; archived?: boolean; }
+export interface Student { id: string; name: string; number: number; active?: boolean; [key: string]: unknown; }
+export interface SchoolClass { id: string; name: string; students: Student[]; archived?: boolean; [key: string]: unknown; }
 export interface CheckSession {
   id: string;
   classId: string;
@@ -10,9 +10,10 @@ export interface CheckSession {
   type: CheckType;
   date: string;
   statuses: Record<string, CheckStatus>;
+  [key: string]: unknown;
 }
-export interface CalendarBreak { id: string; title: string; startDate: string; endDate: string; grades?: number[]; }
-export interface WorkCalendar { schoolYear: string; startDate: string; endDate: string; breaks: CalendarBreak[]; }
+export interface CalendarBreak { id: string; title: string; startDate: string; endDate: string; grades?: number[]; [key: string]: unknown; }
+export interface WorkCalendar { schoolYear: string; startDate: string; endDate: string; breaks: CalendarBreak[]; [key: string]: unknown; }
 export interface AnnualPlanEntry {
   id: string;
   classId: string;
@@ -21,10 +22,17 @@ export interface AnnualPlanEntry {
   topic: string;
   note: string;
   completed: boolean;
+  [key: string]: unknown;
 }
 export interface AppData {
+  schemaVersion?: number;
   classes: SchoolClass[];
   sessions: CheckSession[];
   workCalendar?: WorkCalendar;
   annualPlanEntries?: AnnualPlanEntry[];
+  [key: string]: unknown;
 }
+
+export type VersionedAppData = AppData & {
+  schemaVersion: number;
+};
