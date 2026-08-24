@@ -374,3 +374,92 @@ test("7. sınıf otomatik planı manuel kayıtları ve mevcut sınıf verilerini
   assert.equal(grade6.weeks.flatMap((week) => week.items).filter((item) => item.outcomeCode === "FB.6.3.1.5").reduce((sum, item) => sum + item.hours, 0), 4);
   assert.equal(grade6.weeks.flatMap((week) => week.items).filter((item) => item.outcomeCode === "FB.6.7.2.2").reduce((sum, item) => sum + item.hours, 0), 6);
 });
+
+test("8. sınıf Fen Bilimleri planı 35 haftada 72 + 68 olmak üzere 140 saattir", () => {
+  const result = logic.buildGrade8SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  assert.ok(result);
+  assert.equal(result.weeks.length, 35);
+  assert.deepEqual(result.weeks.map((week) => week.totalHours), Array(35).fill(4));
+  assert.equal(result.weeks.filter((week) => week.term === 1).reduce((sum, week) => sum + week.totalHours, 0), 72);
+  assert.equal(result.weeks.filter((week) => week.term === 2).reduce((sum, week) => sum + week.totalHours, 0), 68);
+  assert.deepEqual({ curriculum: result.curriculumHours, engineering: result.capacityAdjustmentHours, total: result.totalHours }, { curriculum: 132, engineering: 8, total: 140 });
+});
+
+test("8. sınıf resmî ünite toplamları ve 61 canonical F.8 kazanımı korunur", () => {
+  const result = logic.buildGrade8SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const items = result.weeks.flatMap((week) => week.items);
+  const unitHours = new Map();
+  items.filter((item) => item.unit > 0).forEach((item) => unitHours.set(item.unit, (unitHours.get(item.unit) ?? 0) + item.hours));
+  assert.deepEqual([...unitHours.entries()], [[1, 14], [2, 22], [3, 10], [4, 28], [5, 10], [6, 24], [7, 24]]);
+  assert.deepEqual(logic.grade8ScienceUnitHours.map((item) => [item.outcomes, item.curriculumHours, item.planHours]), [[3, 14, 14], [13, 22, 22], [3, 10, 10], [17, 28, 28], [2, 10, 10], [12, 24, 24], [11, 24, 24]]);
+  assert.equal(logic.grade8ScienceCurriculum.length, 61);
+  assert.equal(logic.grade8ScienceCurriculum.every((item) => item.code.startsWith("F.8.") && !item.code.startsWith("FB.8.")), true);
+  assert.equal(new Set(logic.grade8ScienceCurriculum.map((item) => item.code)).size, 61);
+});
+
+test("8. sınıf 2018 kaynak metadata'sını taşır ve Maarif metadata'sı uydurmaz", () => {
+  assert.equal(logic.grade8ScienceCurriculum.every((item) => item.curriculumVersion === "2018 Fen Bilimleri Dersi Öğretim Programı"), true);
+  assert.equal(logic.grade8ScienceCurriculum.every((item) => item.officialDescription && item.officialSource?.includes("mufredat.meb.gov.tr") && item.sectionTitle && item.topicHours > 0), true);
+  assert.equal(logic.grade8ScienceCurriculum.every((item) => [item.processComponents, item.contentFramework, item.learningEvidence, item.learningTeachingExperiences, item.differentiation, item.skills, item.values, item.literacySkills].every((field) => Array.isArray(field) && field.length === 0)), true);
+});
+
+test("8. sınıf ilk haftası F.8.1.1.1 ile başlar; ara tatillerde allocation yoktur", () => {
+  const result = logic.buildGrade8SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  assert.equal(result.weeks[0].weekStart, "2026-09-14");
+  assert.deepEqual(result.weeks[0].items.map((item) => [item.outcomeCodes, item.hours]), [[['F.8.1.1.1'], 4]]);
+  assert.equal(result.weeks.some((week) => week.weekStart === "2026-11-16"), false);
+  assert.equal(result.weeks.some((week) => week.weekStart === "2027-03-08"), false);
+});
+
+test("18 Ocak yalnız 8. sınıfta normal Fen haftasıdır ve 2+2 geçişi doğrudur", () => {
+  const calendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
+  for (const grade of [5, 6, 7]) {
+    const week = logic.buildPlanWeeks(calendar, grade).find((item) => item.startDate === "2027-01-18");
+    assert.equal(week.teachingDays, 0);
+    assert.deepEqual(week.breakTitles, ["Sosyal Etkinlik Haftası"]);
+  }
+  const grade8Week = logic.buildPlanWeeks(calendar, 8).find((item) => item.startDate === "2027-01-18");
+  assert.equal(grade8Week.teachingDays, 5);
+  assert.deepEqual(grade8Week.breakTitles, []);
+  const planWeek = logic.buildGrade8SciencePlan(calendar).weeks.find((item) => item.weekStart === "2027-01-18");
+  assert.deepEqual(planWeek.items.map((item) => [item.title, item.hours]), [["Maddenin Isı ile Etkileşimi", 2], ["Türkiye’de Kimya Endüstrisi", 2]]);
+});
+
+test("8. sınıf kritik 1+3 geçişini ve Basit Makineler 10 saatini korur", () => {
+  const result = logic.buildGrade8SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  assert.deepEqual(result.weeks.find((week) => week.weekStart === "2026-12-28").items.map((item) => [item.title, item.hours]), [["Kimyasal Tepkimeler", 1], ["Asitler ve Bazlar", 3]]);
+  assert.equal(result.weeks.flatMap((week) => week.items).filter((item) => item.unit === 5).reduce((sum, item) => sum + item.hours, 0), 10);
+});
+
+test("tüm F.8 kazanımları 28 Mayıs'a kadar biter ve son iki hafta yalnız mühendisliktir", () => {
+  const result = logic.buildGrade8SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const curriculumItems = result.weeks.flatMap((week) => week.items.map((item) => ({ weekStart: week.weekStart, item }))).filter(({ item }) => item.outcomeCodes?.some((code) => code.startsWith("F.8.")));
+  assert.equal(curriculumItems.at(-1).weekStart, "2027-05-24");
+  for (const weekStart of ["2027-05-31", "2027-06-07"]) {
+    const week = result.weeks.find((item) => item.weekStart === weekStart);
+    assert.deepEqual(week.items.map((item) => [item.title, item.hours, item.badge, item.outcomeCodes]), [["Fen, Mühendislik ve Girişimcilik Uygulamaları", 4, "mühendislik / proje", undefined]]);
+  }
+  assert.equal(result.weeks.some((week) => week.weekStart > "2027-06-07"), false);
+});
+
+test("8. sınıf çoklu kazanım grupları canonical kodları ve açıklamaları kaybetmez", () => {
+  const result = logic.buildGrade8SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const kalitim = result.weeks.flatMap((week) => week.items).find((item) => item.title === "Kalıtım");
+  assert.deepEqual(kalitim.outcomeCodes, ["F.8.2.2.1", "F.8.2.2.2", "F.8.2.2.3"]);
+  assert.deepEqual(kalitim.curricula.map((item) => item.code), kalitim.outcomeCodes);
+  assert.equal(kalitim.curricula.every((item) => item.officialDescription), true);
+});
+
+test("8. sınıf otomatik planı manuel ve mevcut verileri değiştirmez; Grade 5–7 regresyonu yoktur", () => {
+  const workCalendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
+  const data = { classes: [{ id: "8-a", name: "8-A" }], students: [{ id: "student-8" }], sessions: [], workCalendar, annualPlanEntries: [{ id: "manual-8", classId: "8-a", schoolYear: "2026-2027", weekStart: "2026-12-28", topic: "Manuel", note: "Korunmalı", completed: true }], futureField: { keep: true } };
+  const before = structuredClone(data);
+  logic.buildGrade8SciencePlan(workCalendar);
+  assert.deepEqual(data, before);
+  assert.equal(logic.buildGrade5SciencePlan(workCalendar).totalHours, 140);
+  assert.equal(logic.buildGrade6SciencePlan(workCalendar).totalHours, 140);
+  assert.equal(logic.buildGrade7SciencePlan(workCalendar).totalHours, 140);
+  assert.deepEqual(logic.grade7ScienceCurriculum.map((item) => item.code).slice(-3), ["FB.7.6.1.3", "FB.7.7.1.1", "FB.7.7.2.1"]);
+  assert.equal(logic.isGrade8Class("8 / A"), true);
+  assert.equal(logic.buildSciencePlanForClass("8-A", workCalendar).grade, 8);
+});

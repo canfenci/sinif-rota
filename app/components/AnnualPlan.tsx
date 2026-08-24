@@ -58,7 +58,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       <section className="plan-summary">
         <div><p className="kicker">İŞ TAKVİMİNE GÖRE</p><h2>Hafta hafta<br />ders akışı.</h2></div>
         <button type="button" onClick={() => setCalendarOpen(true)}>Takvimi düzenle</button>
-        {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 4 saat laboratuvar güvenliği + 136 saat öğrenme çıktıları" : "Haftada 4 saat · 138 saat resmî program + 2 saat öğretmen planlama"}</span><small>Toplam 140 saat · 1. dönem 68 saat · 2. dönem 72 saat</small></div>}
+        {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 4 saat laboratuvar güvenliği + 136 saat öğrenme çıktıları" : sciencePlan.grade === 8 ? "Haftada 4 saat · 132 saat kazanım + 8 saat mühendislik / proje" : "Haftada 4 saat · 138 saat resmî program + 2 saat öğretmen planlama"}</span><small>Toplam 140 saat · 1. dönem {sciencePlan.firstTermHours} saat · 2. dönem {sciencePlan.secondTermHours} saat</small></div>}
         <dl><div><dt>Planlanan</dt><dd>{planned}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>Tamamlanan</dt><dd>{completed}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>{sciencePlan ? "Ders saati" : "İş günü"}</dt><dd>{sciencePlan ? sciencePlan.totalHours : teachable.reduce((sum, week) => sum + week.teachingDays, 0)}</dd></div></dl>
       </section>
       <div className="plan-controls">
@@ -86,7 +86,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
 }
 
 function ScienceWeekItems({ items }: { items: SciencePlanItem[] }) {
-  return <span className="science-week-items">{items.map((item, index) => <span key={`${item.unit}-${item.outcomeCode ?? item.title}-${index}`}><strong>{item.title}</strong><b>{item.hours} saat</b>{item.badge && <em>{item.badge}</em>}</span>)}</span>;
+  return <span className="science-week-items">{items.map((item, index) => <span key={`${item.unit}-${item.outcomeCode ?? item.title}-${index}`}><strong>{item.title}</strong>{item.outcomeCodes && item.outcomeCodes.length > 1 && <small>{item.outcomeCodes.join(" · ")}</small>}<b>{item.hours} saat</b>{item.badge && <em>{item.badge}</em>}</span>)}</span>;
 }
 
 const detailSections: Array<[keyof NonNullable<SciencePlanItem["curriculum"]>, string]> = [
@@ -96,12 +96,14 @@ const detailSections: Array<[keyof NonNullable<SciencePlanItem["curriculum"]>, s
 function ScienceDetailCards({ items, className, week }: { items: SciencePlanItem[]; className: string; week: PlanWeek }) {
   return <section className="science-detail-list" aria-label="Haftanın öğrenme çıktıları">{items.map((item, index) => {
     const allocation = item.allocation;
-    const curriculum = item.curriculum;
-    const skills = curriculum ? [...curriculum.skills, ...curriculum.values, ...curriculum.literacySkills] : [];
+    const curricula = item.curricula?.length ? item.curricula : item.curriculum ? [item.curriculum] : [];
+    const outcomeCodes = item.outcomeCodes?.length ? item.outcomeCodes : item.outcomeCode ? [item.outcomeCode] : [];
+    const skills = curricula.flatMap((entry) => [...entry.skills, ...entry.values, ...entry.literacySkills]);
+    const availableSections = detailSections.map(([key, label]) => [key, label, curricula.flatMap((entry) => entry[key] as string[])] as const).filter(([, , values]) => values.length > 0);
     return <article className="science-detail-card" key={`${item.outcomeCode ?? item.title}-${index}`}>
-      <header><span>{item.unit === 0 ? "Hazırlık" : `${item.unit}. Ünite`}</span><strong>{item.outcomeCode ?? item.title}</strong></header>
-      <dl><div><dt>Hafta</dt><dd>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))}</dd></div><div><dt>Sınıf</dt><dd>{className}</dd></div><div><dt>Ünite</dt><dd>{item.unitTitle}</dd></div><div><dt>Öğrenme çıktısı</dt><dd>{item.outcomeCode ?? "—"}</dd></div><div className="detail-wide"><dt>Resmî açıklama</dt><dd>{curriculum?.officialDescription ?? "Kaynak açıklaması henüz eklenmedi."}</dd></div><div><dt>Bu hafta</dt><dd>{allocation.allocatedHours} saat</dd></div><div><dt>Toplam plan</dt><dd>{allocation.plannedTotalHours} saat</dd></div><div><dt>Önce işlenen</dt><dd>{allocation.completedBeforeHours} saat</dd></div><div><dt>Hafta sonu</dt><dd>{allocation.completedAfterHours} saat</dd></div></dl>
-      {curriculum && <div className="science-detail-accordions">{detailSections.map(([key, label]) => <details key={key}><summary>{label}</summary><p>{(curriculum[key] as string[]).join(" · ") || "Kaynak verisi eklenmedi."}</p></details>)}<details><summary>Beceri / Değer / Okuryazarlık</summary><p>{skills.join(" · ") || "Kaynak verisi eklenmedi."}</p></details></div>}
+      <header><span>{item.unit === 0 ? "Uygulama" : `${item.unit}. Ünite`}</span><strong>{item.title}</strong></header>
+      <dl><div><dt>Hafta</dt><dd>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))}</dd></div><div><dt>Sınıf</dt><dd>{className}</dd></div><div><dt>Ünite</dt><dd>{item.unitTitle}</dd></div><div><dt>Öğrenme çıktısı</dt><dd>{outcomeCodes.join(" · ") || "—"}</dd></div>{curricula.length > 0 && <div className="detail-wide"><dt>Resmî açıklama</dt><dd>{curricula.map((entry) => <span key={entry.code}><strong>{entry.code}</strong> — {entry.officialDescription}</span>)}</dd></div>}<div><dt>Bu hafta</dt><dd>{allocation.allocatedHours} saat</dd></div><div><dt>Toplam plan</dt><dd>{allocation.plannedTotalHours} saat</dd></div><div><dt>Önce işlenen</dt><dd>{allocation.completedBeforeHours} saat</dd></div><div><dt>Hafta sonu</dt><dd>{allocation.completedAfterHours} saat</dd></div><div className="detail-wide"><dt>Öğretmen notu</dt><dd>{allocation.teacherNote ?? "—"}</dd></div></dl>
+      {(availableSections.length > 0 || skills.length > 0) && <div className="science-detail-accordions">{availableSections.map(([key, label, values]) => <details key={key}><summary>{label}</summary><p>{[...new Set(values)].join(" · ")}</p></details>)}{skills.length > 0 && <details><summary>Beceri / Değer / Okuryazarlık</summary><p>{[...new Set(skills)].join(" · ")}</p></details>}</div>}
     </article>;
   })}</section>;
 }
