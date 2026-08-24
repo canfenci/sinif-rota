@@ -280,12 +280,97 @@ test("6. sınıf eklenirken 5. sınıf 140 saatlik planı değişmez", () => {
   assert.deepEqual(plan.weeks.find((item) => item.weekStart === "2027-06-14").items.map((item) => [item.outcomeCode, item.hours]), [["FB.5.7.1.3", 4]]);
 });
 
-test("sınıf adına göre 5. ve 6. sınıf Fen profili seçilir", () => {
+test("sınıf adına göre 5., 6. ve 7. sınıf Fen profili seçilir", () => {
   const calendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
   assert.equal(logic.isGrade6Class("6-A"), true);
   assert.equal(logic.isGrade6Class("6 / B"), true);
   assert.equal(logic.isGrade6Class("5-A"), false);
   assert.equal(logic.buildSciencePlanForClass("5-A", calendar).grade, 5);
   assert.equal(logic.buildSciencePlanForClass("6-B", calendar).grade, 6);
-  assert.equal(logic.buildSciencePlanForClass("7-A", calendar), null);
+  assert.equal(logic.isGrade7Class("7 / C"), true);
+  assert.equal(logic.isGrade7Class("6-A"), false);
+  assert.equal(logic.buildSciencePlanForClass("7-A", calendar).grade, 7);
+});
+
+test("7. sınıf Fen Bilimleri planı 35 haftada 68 + 72 olmak üzere 140 saattir", () => {
+  const result = logic.buildGrade7SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  assert.ok(result);
+  assert.equal(result.weeks.length, 35);
+  assert.deepEqual(result.weeks.map((week) => week.totalHours), Array(35).fill(4));
+  assert.equal(result.weeks.filter((week) => week.term === 1).reduce((sum, week) => sum + week.totalHours, 0), 68);
+  assert.equal(result.weeks.filter((week) => week.term === 2).reduce((sum, week) => sum + week.totalHours, 0), 72);
+  assert.deepEqual({ curriculum: result.curriculumHours, adjustment: result.capacityAdjustmentHours, capacity: result.totalHours }, { curriculum: 138, adjustment: 2, capacity: 140 });
+});
+
+test("7. sınıf ünite toplamları ile öğretmen +2 saat kararı korunur", () => {
+  const result = logic.buildGrade7SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const items = result.weeks.flatMap((week) => week.items);
+  const unitHours = new Map();
+  items.forEach((item) => unitHours.set(item.unit, (unitHours.get(item.unit) ?? 0) + item.hours));
+  assert.deepEqual([...unitHours.entries()], [[1, 14], [2, 20], [3, 32], [4, 14], [5, 36], [6, 12], [7, 12]]);
+  assert.deepEqual(logic.grade7ScienceUnitHours.map((item) => [item.curriculumHours, item.planHours]), [[14, 14], [20, 20], [32, 32], [14, 14], [34, 36], [12, 12], [12, 12]]);
+  assert.equal(items.filter((item) => item.outcomeCode === "FB.7.5.1.4").reduce((sum, item) => sum + item.hours, 0), 6);
+  assert.equal(items.filter((item) => item.outcomeCode === "FB.7.5.1.4").every((item) => item.badge === "+2 öğretmen planlama"), true);
+  assert.equal(items.filter((item) => item.outcomeCode === "FB.7.7.1.1").reduce((sum, item) => sum + item.hours, 0), 6);
+  assert.equal(items.filter((item) => item.outcomeCode === "FB.7.7.2.1").reduce((sum, item) => sum + item.hours, 0), 6);
+});
+
+test("7. sınıf öğrenme çıktılarının exact MEB kodları, sırası ve saatleri korunur", () => {
+  const result = logic.buildGrade7SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const actual = new Map();
+  result.weeks.flatMap((week) => week.items).forEach((item) => actual.set(item.outcomeCode, (actual.get(item.outcomeCode) ?? 0) + item.hours));
+  assert.deepEqual([...actual.entries()], [
+    ["FB.7.1.1.1", 2], ["FB.7.1.1.2", 4], ["FB.7.1.1.3", 2], ["FB.7.1.2.1", 4], ["FB.7.1.2.2", 2],
+    ["FB.7.2.1.1", 6], ["FB.7.2.1.2", 6], ["FB.7.2.2.1", 8],
+    ["FB.7.3.1.1", 6], ["FB.7.3.1.2", 2], ["FB.7.3.2.1", 6], ["FB.7.3.2.2", 2], ["FB.7.3.2.3", 2], ["FB.7.3.3.1", 6], ["FB.7.3.3.2", 2], ["FB.7.3.4.1", 4], ["FB.7.3.4.2", 2],
+    ["FB.7.4.1.1", 6], ["FB.7.4.2.1", 4], ["FB.7.4.2.2", 4],
+    ["FB.7.5.1.1", 4], ["FB.7.5.1.2", 2], ["FB.7.5.1.3", 2], ["FB.7.5.1.4", 6], ["FB.7.5.2.1", 4], ["FB.7.5.2.2", 2], ["FB.7.5.2.3", 2], ["FB.7.5.2.4", 2], ["FB.7.5.3.1", 2], ["FB.7.5.3.2", 6], ["FB.7.5.4.1", 4],
+    ["FB.7.6.1.1", 2], ["FB.7.6.1.2", 6], ["FB.7.6.1.3", 4],
+    ["FB.7.7.1.1", 6], ["FB.7.7.2.1", 6],
+  ]);
+  assert.deepEqual([...actual.keys()], logic.grade7ScienceCurriculum.map((item) => item.code));
+  assert.equal(actual.has("FB.7.5.10"), false);
+});
+
+test("7. sınıf ilk haftası doğrudan üniteyle başlar; sosyal ve normal Haziran haftaları doğrudur", () => {
+  const calendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
+  const weeks = logic.buildPlanWeeks(calendar, 7);
+  const plan = logic.buildGrade7SciencePlan(calendar);
+  assert.deepEqual(plan.weeks[0].items.map((item) => [item.outcomeCode, item.hours]), [["FB.7.1.1.1", 2], ["FB.7.1.1.2", 2]]);
+  assert.equal(plan.weeks.flatMap((week) => week.items).some((item) => /laboratuvar/i.test(item.title)), false);
+  for (const weekStart of ["2027-01-18", "2027-06-21"]) {
+    assert.equal(weeks.find((item) => item.startDate === weekStart).teachingDays, 0);
+    assert.equal(plan.weeks.some((item) => item.weekStart === weekStart), false);
+  }
+  assert.equal(weeks.find((item) => item.startDate === "2027-06-14").teachingDays, 5);
+  assert.deepEqual(plan.weeks.find((item) => item.weekStart === "2027-06-14").items.map((item) => [item.outcomeCode, item.hours]), [["FB.7.7.2.1", 4]]);
+});
+
+test("7. sınıf ortak motoru çapraz ünite ve dönemler arası kısmi ilerlemeyi korur", () => {
+  const plan = logic.buildGrade7SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  assert.deepEqual(plan.weeks.find((item) => item.weekStart === "2026-10-05").items.map((item) => [item.outcomeCode, item.hours]), [["FB.7.1.2.2", 2], ["FB.7.2.1.1", 2]]);
+  assert.deepEqual(plan.weeks.find((item) => item.weekStart === "2026-11-09").items.map((item) => [item.outcomeCode, item.hours]), [["FB.7.2.2.1", 2], ["FB.7.3.1.1", 2]]);
+  const january = plan.weeks.find((item) => item.weekStart === "2027-01-11").items.at(-1);
+  const february = plan.weeks.find((item) => item.weekStart === "2027-02-08").items[0];
+  assert.deepEqual([january.outcomeCode, january.hours, january.allocation.completedBeforeHours, january.allocation.completedAfterHours, january.allocation.plannedTotalHours], ["FB.7.4.1.1", 2, 0, 2, 6]);
+  assert.deepEqual([february.outcomeCode, february.hours, february.allocation.completedBeforeHours, february.allocation.completedAfterHours, february.allocation.plannedTotalHours], ["FB.7.4.1.1", 4, 2, 6, 6]);
+});
+
+test("7. sınıf resmî açıklamaları kaynaklıdır ve kaynak dışı metadata üretilmez", () => {
+  assert.equal(logic.grade7ScienceCurriculum.length, 36);
+  assert.equal(logic.grade7ScienceCurriculum.every((item) => item.officialDescription && item.officialSource?.startsWith("https://tymm.meb.gov.tr/fen-bilimleri-dersi/unite/")), true);
+  assert.equal(logic.grade7ScienceCurriculum.every((item) => [item.processComponents, item.contentFramework, item.keyConcepts, item.learningEvidence, item.learningTeachingExperiences, item.differentiation, item.skills, item.values, item.literacySkills].every((field) => Array.isArray(field) && field.length === 0)), true);
+});
+
+test("7. sınıf otomatik planı manuel kayıtları ve mevcut sınıf verilerini değiştirmez", () => {
+  const workCalendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
+  const data = { classes: [{ id: "7-a", name: "7-A" }], students: [{ id: "student-1" }], sessions: [], workCalendar, annualPlanEntries: [{ id: "manual-7", classId: "7-a", schoolYear: "2026-2027", weekStart: "2026-10-05", topic: "Manuel plan", note: "Korunmalı", completed: false }], futureField: { keep: true } };
+  const before = structuredClone(data);
+  logic.buildGrade7SciencePlan(workCalendar);
+  assert.deepEqual(data, before);
+  assert.equal(logic.buildGrade5SciencePlan(workCalendar).totalHours, 140);
+  const grade6 = logic.buildGrade6SciencePlan(workCalendar);
+  assert.equal(grade6.totalHours, 140);
+  assert.equal(grade6.weeks.flatMap((week) => week.items).filter((item) => item.outcomeCode === "FB.6.3.1.5").reduce((sum, item) => sum + item.hours, 0), 4);
+  assert.equal(grade6.weeks.flatMap((week) => week.items).filter((item) => item.outcomeCode === "FB.6.7.2.2").reduce((sum, item) => sum + item.hours, 0), 6);
 });
