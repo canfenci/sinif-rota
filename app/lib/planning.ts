@@ -83,7 +83,7 @@ export interface SciencePlan {
 export type Grade5SciencePlanItem = SciencePlanItem;
 export type Grade5SciencePlanWeek = SciencePlanWeek;
 export type Grade5SciencePlan = SciencePlan & { grade: 5; curriculumHours: 140; capacityAdjustmentHours: 0; totalHours: 140; secondTermHours: 72 };
-export type Grade6SciencePlan = SciencePlan & { grade: 6; curriculumHours: 138; capacityAdjustmentHours: -2 };
+export type Grade6SciencePlan = SciencePlan & { grade: 6; curriculumHours: 138; capacityAdjustmentHours: 2; totalHours: 140; secondTermHours: 72 };
 
 type ScienceBlock = {
   unit: number;
@@ -150,12 +150,52 @@ function grade5Block(unit: number, code: string, hours: number, options: Pick<Sc
 export const grade6ScienceUnitHours = [
   { unit: 1, title: "Güneş Sistemi ve Tutulmalar", curriculumHours: 12, planHours: 12 },
   { unit: 2, title: "Kuvvetin Etkisinde Hareket", curriculumHours: 14, planHours: 14 },
-  { unit: 3, title: "Canlılarda Sistemler", curriculumHours: 22, planHours: 22 },
+  { unit: 3, title: "Canlılarda Sistemler", curriculumHours: 22, planHours: 24 },
   { unit: 4, title: "Işığın Yansıması ve Renkler", curriculumHours: 22, planHours: 22 },
   { unit: 5, title: "Maddenin Ayırt Edici Özellikleri", curriculumHours: 32, planHours: 32 },
   { unit: 6, title: "Elektriğin İletimi ve Direnç", curriculumHours: 18, planHours: 18 },
-  { unit: 7, title: "Sürdürülebilir Yaşam ve Etkileşim", curriculumHours: 18, planHours: 16 },
+  { unit: 7, title: "Sürdürülebilir Yaşam ve Etkileşim", curriculumHours: 18, planHours: 18 },
 ] as const;
+
+const grade6UnitTitles = new Map<number, string>(grade6ScienceUnitHours.map((item) => [item.unit, item.title]));
+
+function grade6Outcome(unit: number, code: string): CurriculumOutcome {
+  return {
+    grade: 6,
+    curriculumVersion: "Türkiye Yüzyılı Maarif Modeli",
+    unitId: `FB.6.${unit}`,
+    unitTitle: grade6UnitTitles.get(unit) ?? `${unit}. Ünite`,
+    code,
+    officialDescription: null,
+    officialSource: null,
+    processComponents: [],
+    contentFramework: [],
+    keyConcepts: [],
+    learningEvidence: [],
+    learningTeachingExperiences: [],
+    differentiation: [],
+    skills: [],
+    values: [],
+    literacySkills: [],
+  };
+}
+
+export const grade6ScienceCurriculum: CurriculumOutcome[] = [
+  ...["FB.6.1.1.1", "FB.6.1.1.2", "FB.6.1.2.1", "FB.6.1.2.2"].map((code) => grade6Outcome(1, code)),
+  ...["FB.6.2.1.1", "FB.6.2.1.2", "FB.6.2.2.1"].map((code) => grade6Outcome(2, code)),
+  ...["FB.6.3.1.1", "FB.6.3.1.2", "FB.6.3.1.3", "FB.6.3.1.4", "FB.6.3.1.5", "FB.6.3.2.1", "FB.6.3.2.2", "FB.6.3.2.3", "FB.6.3.2.4"].map((code) => grade6Outcome(3, code)),
+  ...["FB.6.4.1.1", "FB.6.4.1.2", "FB.6.4.2.1", "FB.6.4.3.1", "FB.6.4.3.2", "FB.6.4.3.3", "FB.6.4.3.4"].map((code) => grade6Outcome(4, code)),
+  ...["FB.6.5.1.1", "FB.6.5.2.1", "FB.6.5.3.1", "FB.6.5.3.2", "FB.6.5.3.3", "FB.6.5.3.4"].map((code) => grade6Outcome(5, code)),
+  ...["FB.6.6.1.1", "FB.6.6.2.1", "FB.6.6.2.2"].map((code) => grade6Outcome(6, code)),
+  ...["FB.6.7.1.1", "FB.6.7.1.2", "FB.6.7.2.1", "FB.6.7.2.2"].map((code) => grade6Outcome(7, code)),
+];
+
+const grade6CurriculumByCode = new Map(grade6ScienceCurriculum.map((outcome) => [outcome.code, outcome]));
+
+function grade6Block(unit: number, code: string, hours: number, options: Pick<ScienceBlock, "badge" | "initialCompletedHours" | "plannedTotalHours"> = {}): ScienceBlock {
+  const curriculum = grade6CurriculumByCode.get(code)!;
+  return { unit, unitTitle: curriculum.unitTitle, title: code, outcomeCode: code, curriculum, hours, ...options };
+}
 
 const calendar20262027: WorkCalendar = {
   schoolYear: "2026-2027",
@@ -166,7 +206,6 @@ const calendar20262027: WorkCalendar = {
     { id: "2027-first-social", title: "Sosyal Etkinlik Haftası", startDate: "2027-01-18", endDate: "2027-01-22" },
     { id: "2027-semester-break", title: "Yarıyıl Tatili", startDate: "2027-01-25", endDate: "2027-02-05" },
     { id: "2027-second-break", title: "2. Dönem Ara Tatili", startDate: "2027-03-08", endDate: "2027-03-12" },
-    { id: "2027-second-social-1", title: "Sosyal Etkinlik Haftası", startDate: "2027-06-14", endDate: "2027-06-18", grades: [6] },
     { id: "2027-second-social-2", title: "Sosyal Etkinlik Haftası", startDate: "2027-06-21", endDate: "2027-06-25" },
   ],
 };
@@ -225,9 +264,9 @@ export function isGrade6Class(name: string) {
 
 function getGrade6ScienceTermWeeks(calendar: WorkCalendar) {
   const weeks = buildPlanWeeks(calendar, 6);
-  const firstTerm = weeks.filter((week) => week.startDate >= "2026-09-14" && week.startDate < "2027-01-18" && week.teachingDays > 0).slice(0, 17);
-  const secondTerm = weeks.filter((week) => week.startDate >= "2027-02-08" && week.startDate < "2027-06-14" && week.teachingDays > 0).slice(0, 17);
-  return firstTerm.length === 17 && secondTerm.length === 17 ? { firstTerm, secondTerm } : null;
+  const firstTerm = weeks.filter((week) => week.startDate >= "2026-09-14" && week.startDate < "2027-01-18" && week.teachingDays > 0);
+  const secondTerm = weeks.filter((week) => week.startDate >= "2027-02-08" && week.startDate < "2027-06-21" && week.teachingDays > 0);
+  return firstTerm.length === 17 && secondTerm.length === 18 ? { firstTerm, secondTerm } : null;
 }
 
 function allocateScienceWeeks(weeks: PlanWeek[], term: 1 | 2, blocks: ScienceBlock[]) {
@@ -322,17 +361,16 @@ export function buildGrade6SciencePlan(calendar: WorkCalendar): Grade6SciencePla
   if (!termWeeks) return null;
 
   const firstTermBlocks: ScienceBlock[] = [
-    { unit: 1, unitTitle: "Güneş Sistemi ve Tutulmalar", title: "1. Ünite — Güneş Sistemi ve Tutulmalar", hours: 12 },
-    { unit: 2, unitTitle: "Kuvvetin Etkisinde Hareket", title: "2. Ünite — Kuvvetin Etkisinde Hareket", hours: 14 },
-    { unit: 3, unitTitle: "Canlılarda Sistemler", title: "3. Ünite — Canlılarda Sistemler", hours: 22 },
-    { unit: 4, unitTitle: "Işığın Yansıması ve Renkler", title: "4. Ünite — Işığın Yansıması ve Renkler (FB.6.4.3.3'e kadar)", hours: 20 },
+    grade6Block(1, "FB.6.1.1.1", 4), grade6Block(1, "FB.6.1.1.2", 4), grade6Block(1, "FB.6.1.2.1", 2), grade6Block(1, "FB.6.1.2.2", 2),
+    grade6Block(2, "FB.6.2.1.1", 4), grade6Block(2, "FB.6.2.1.2", 4), grade6Block(2, "FB.6.2.2.1", 6),
+    grade6Block(3, "FB.6.3.1.1", 2), grade6Block(3, "FB.6.3.1.2", 4), grade6Block(3, "FB.6.3.1.3", 4), grade6Block(3, "FB.6.3.1.4", 2), grade6Block(3, "FB.6.3.1.5", 4, { badge: "+2 öğretmen planlama" }), grade6Block(3, "FB.6.3.2.1", 2), grade6Block(3, "FB.6.3.2.2", 2), grade6Block(3, "FB.6.3.2.3", 2), grade6Block(3, "FB.6.3.2.4", 2),
+    grade6Block(4, "FB.6.4.1.1", 2), grade6Block(4, "FB.6.4.1.2", 4), grade6Block(4, "FB.6.4.2.1", 4), grade6Block(4, "FB.6.4.3.1", 2), grade6Block(4, "FB.6.4.3.2", 4), grade6Block(4, "FB.6.4.3.3", 2, { plannedTotalHours: 4 }),
   ];
   const secondTermBlocks: ScienceBlock[] = [
-    { unit: 4, unitTitle: "Işığın Yansıması ve Renkler", title: "FB.6.4.3.4 — Güneş enerjisinin günlük hayat ve teknolojideki yenilikçi uygulamaları", outcomeCode: "FB.6.4.3.4", badge: "2. döneme taşındı", hours: 2 },
-    { unit: 5, unitTitle: "Maddenin Ayırt Edici Özellikleri", title: "5. Ünite — Maddenin Ayırt Edici Özellikleri", hours: 32 },
-    { unit: 6, unitTitle: "Elektriğin İletimi ve Direnç", title: "6. Ünite — Elektriğin İletimi ve Direnç", hours: 18 },
-    { unit: 7, unitTitle: "Sürdürülebilir Yaşam ve Etkileşim", title: "7. Ünite — Sürdürülebilir Yaşam ve Etkileşim", hours: 14 },
-    { unit: 7, unitTitle: "Sürdürülebilir Yaşam ve Etkileşim", title: "FB.6.7.2.2 — Sürdürülebilir yaşam ve etkileşim", outcomeCode: "FB.6.7.2.2", badge: "özel süre", hours: 2 },
+    grade6Block(4, "FB.6.4.3.3", 2, { initialCompletedHours: 2, plannedTotalHours: 4 }), grade6Block(4, "FB.6.4.3.4", 2),
+    grade6Block(5, "FB.6.5.1.1", 6), grade6Block(5, "FB.6.5.2.1", 6), grade6Block(5, "FB.6.5.3.1", 6), grade6Block(5, "FB.6.5.3.2", 6), grade6Block(5, "FB.6.5.3.3", 4), grade6Block(5, "FB.6.5.3.4", 4),
+    grade6Block(6, "FB.6.6.1.1", 4), grade6Block(6, "FB.6.6.2.1", 8), grade6Block(6, "FB.6.6.2.2", 6),
+    grade6Block(7, "FB.6.7.1.1", 4), grade6Block(7, "FB.6.7.1.2", 4), grade6Block(7, "FB.6.7.2.1", 4), grade6Block(7, "FB.6.7.2.2", 6),
   ];
 
   return {
@@ -340,10 +378,10 @@ export function buildGrade6SciencePlan(calendar: WorkCalendar): Grade6SciencePla
     schoolYear: "2026-2027",
     weeklyHours: 4,
     curriculumHours: 138,
-    capacityAdjustmentHours: -2,
-    totalHours: 136,
+    capacityAdjustmentHours: 2,
+    totalHours: 140,
     firstTermHours: 68,
-    secondTermHours: 68,
+    secondTermHours: 72,
     weeks: [
       ...allocateScienceWeeks(termWeeks.firstTerm, 1, firstTermBlocks),
       ...allocateScienceWeeks(termWeeks.secondTerm, 2, secondTermBlocks),

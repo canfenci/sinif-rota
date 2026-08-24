@@ -58,7 +58,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       <section className="plan-summary">
         <div><p className="kicker">İŞ TAKVİMİNE GÖRE</p><h2>Hafta hafta<br />ders akışı.</h2></div>
         <button type="button" onClick={() => setCalendarOpen(true)}>Takvimi düzenle</button>
-        {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 4 saat laboratuvar güvenliği + 136 saat öğrenme çıktıları" : "Haftada 4 saat · 138 saat MEB programı · 136 saat gerçek kapasite"}</span><small>{sciencePlan.grade === 5 ? "Toplam 140 saat · 1. dönem 68 saat · 2. dönem 72 saat" : "7. ünite 16 saat · 1. dönem 68 saat · 2. dönem 68 saat"}</small></div>}
+        {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 4 saat laboratuvar güvenliği + 136 saat öğrenme çıktıları" : "Haftada 4 saat · 138 saat resmî program + 2 saat öğretmen planlama"}</span><small>Toplam 140 saat · 1. dönem 68 saat · 2. dönem 72 saat</small></div>}
         <dl><div><dt>Planlanan</dt><dd>{planned}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>Tamamlanan</dt><dd>{completed}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>{sciencePlan ? "Ders saati" : "İş günü"}</dt><dd>{sciencePlan ? sciencePlan.totalHours : teachable.reduce((sum, week) => sum + week.teachingDays, 0)}</dd></div></dl>
       </section>
       <div className="plan-controls">

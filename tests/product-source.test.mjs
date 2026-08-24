@@ -109,6 +109,7 @@ test("mobil görünüm dokunma, dialog ve safe-area sınırlarını korur", asyn
 test("yıllık plan mobil detayında çıktı, süre ilerlemesi ve manuel kayıt ayrımı vardır", async () => {
   const plan = await read("app/components/AnnualPlan.tsx");
   assert.match(plan, /ScienceDetailCards/);
+  assert.match(plan, /items\.map\(\(item, index\) =>/);
   assert.match(plan, /Resmî açıklama/);
   assert.match(plan, /Önce işlenen/);
   assert.match(plan, /Hafta sonu/);
