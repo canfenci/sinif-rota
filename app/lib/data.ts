@@ -1,4 +1,4 @@
-import type { AppData, SchoolClass, Student } from "./types";
+import type { AppData, CheckSession, CheckStatus, CheckType, SchoolClass, Student } from "./types";
 
 export type BulkStudentAction = "delete" | "activate" | "deactivate" | "move" | "copy";
 
@@ -49,6 +49,10 @@ export function removeStudent(data: AppData, classId: string, studentId: string)
 
 export function activeStudentCount(schoolClass: SchoolClass) {
   return schoolClass.students.filter((student) => student.active !== false).length;
+}
+
+export function createCheckSession(schoolClass: SchoolClass, type: CheckType, statuses: Record<string, CheckStatus>, date: string, idFactory: () => string): CheckSession {
+  return { id: idFactory(), classId: schoolClass.id, className: schoolClass.name, type, date, statuses };
 }
 
 export function transferConflicts(source: SchoolClass, target: SchoolClass, studentIds: string[]) {

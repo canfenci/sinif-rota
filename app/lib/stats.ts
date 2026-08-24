@@ -3,6 +3,14 @@ import type { CheckSession, CheckType } from "./types";
 export interface StudentStat { type: CheckType; complete: number; partial: number; missing: number; absent: number; considered: number; rate: number; }
 export const checkTypes: CheckType[] = ["Ödev", "Defter", "Kitap", "Materyal"];
 
+export function studentHistorySessions(studentId: string, sessions: CheckSession[]) {
+  return sessions.filter((session) => studentId in session.statuses);
+}
+
+export function classHistorySessions(classId: string, sessions: CheckSession[]) {
+  return sessions.filter((session) => session.classId === classId);
+}
+
 export function studentStats(studentId: string, sessions: CheckSession[]): StudentStat[] {
   return checkTypes.map((type) => {
     const values = sessions.filter((session) => session.type === type && session.statuses[studentId]).map((session) => session.statuses[studentId]);

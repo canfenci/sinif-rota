@@ -5,9 +5,9 @@ import { Sheet } from "./components/Sheet";
 import { StatusSelector } from "./components/StatusSelector";
 import { StudentImport } from "./components/StudentImport";
 import { AnnualPlan } from "./components/AnnualPlan";
-import { activeStudentCount, applyBulkStudentAction, classNameExists, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
+import { activeStudentCount, applyBulkStudentAction, classNameExists, createCheckSession, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
 import { seedData } from "./lib/seed";
-import { checkTypes, studentStats } from "./lib/stats";
+import { checkTypes, studentHistorySessions, studentStats } from "./lib/stats";
 import { localRepository } from "./lib/storage";
 import { createDefaultWorkCalendar, updateAnnualPlanEntry } from "./lib/planning";
 import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./lib/types";
@@ -120,7 +120,8 @@ export default function Home() {
   function saveCheck() {
     const checkClass = activeClasses.find((item) => item.id === classId) ?? activeClasses[0];
     if (!checkClass || !statuses) return;
-    setData((current) => ({ ...current, sessions: [...current.sessions, { id: crypto.randomUUID(), classId: checkClass.id, className: checkClass.name, type: checkType, date: new Date().toISOString(), statuses }] }));
+    const session = createCheckSession(checkClass, checkType, statuses, new Date().toISOString(), () => crypto.randomUUID());
+    setData((current) => ({ ...current, sessions: [...current.sessions, session] }));
     showToast("Kontrol kaydedildi"); navigate("class");
   }
   function leaveQuickCheck() {
@@ -206,7 +207,7 @@ function QuickView({ classes, classId, type, statuses, counts, onClass, onType, 
 }
 
 function StudentView({ student, schoolClass, sessions, onBack }: { student: Student; schoolClass: SchoolClass; sessions: AppData["sessions"]; onBack: () => void }) {
-  const stats = studentStats(student.id, sessions.filter((session) => session.classId === schoolClass.id));
+  const stats = studentStats(student.id, studentHistorySessions(student.id, sessions));
   const totalAbsent = stats.reduce((sum, stat) => sum + stat.absent, 0);
   return <><AppHeader eyebrow={`${schoolClass.name} · ${student.number} NUMARA`} title={student.name} back={onBack} /><section className="student-summary"><div><span>GENEL DEVAM</span><strong>{totalAbsent}</strong><small>toplam gelmedi kaydı</small></div><p>“Gelmedi” kayıtları başarı oranlarına dahil edilmez.</p></section><section className="stats-section"><p className="kicker">TEMEL İSTATİSTİKLER</p><div className="stats-list">{stats.map((stat) => <div className="stat-row" key={stat.type}><div><h3>{stat.type}</h3><p>{stat.considered ? `${stat.complete} tam / ${stat.considered} değerlendirme` : "Henüz değerlendirme yok"}{stat.absent ? ` · ${stat.absent} G` : ""}</p></div><strong>{stat.considered ? `%${stat.rate}` : "—"}</strong><div className="stat-bar"><i style={{ width: `${stat.rate}%` }} /></div></div>)}</div></section><section className="rule-note"><strong>Hesaplama nasıl çalışır?</strong><p>Tam kayıtlar, öğrencinin bulunduğu derslerdeki toplam değerlendirmeye bölünür. “G” kayıtları paydaya girmez.</p></section></>;
 }
