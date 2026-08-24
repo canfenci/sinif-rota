@@ -14,6 +14,41 @@ const source = { id: "a", name: "5-A", students: [{ id: "s1", number: 1, name: "
 const target = { id: "b", name: "5-B", students: [{ id: "b1", number: 2, name: "Başka Öğrenci" }] };
 const session = { id: "x", classId: "a", className: "5-A", type: "Ödev", date: "2026-08-20T09:00:00.000Z", statuses: { s1: "complete", s2: "missing" } };
 const data = { classes: [source, target], sessions: [session] };
+const workCalendar = { schoolYear: "2026-2027", startDate: "2026-09-07", endDate: "2027-06-18", breaks: [] };
+const annualPlanEntries = [{ id: "plan-1", classId: "a", schoolYear: "2026-2027", weekStart: "2026-09-07", topic: "Doğal sayılar", note: "", completed: false }];
+const futureField = { enabled: true };
+const protectedData = { ...data, workCalendar, annualPlanEntries, futureField };
+
+test("tek öğrenci silme tam AppData alanlarını korur", () => {
+  const result = logic.removeStudent(protectedData, "a", "s1");
+  assert.deepEqual(result.classes[0].students.map((student) => student.id), ["s2"]);
+  assert.deepEqual(result.sessions[0].statuses, { s2: "missing" });
+  assert.strictEqual(result.classes[1], target);
+  assert.strictEqual(result.workCalendar, workCalendar);
+  assert.strictEqual(result.annualPlanEntries, annualPlanEntries);
+  assert.strictEqual(result.futureField, futureField);
+});
+
+test("toplu öğrenci silme tam AppData alanlarını korur", () => {
+  const result = logic.applyBulkStudentAction(protectedData, "a", ["s1", "s2"], "delete", undefined, () => "unused");
+  assert.equal(result.data.classes[0].students.length, 0);
+  assert.deepEqual(result.data.sessions[0].statuses, {});
+  assert.strictEqual(result.data.workCalendar, workCalendar);
+  assert.strictEqual(result.data.annualPlanEntries, annualPlanEntries);
+  assert.strictEqual(result.data.futureField, futureField);
+});
+
+test("sınıf adı değiştirme yalnız ilgili sınıf adını değiştirir", () => {
+  const result = logic.renameClass(protectedData, "a", "5-A Yeni");
+  assert.equal(result.classes[0].id, source.id);
+  assert.equal(result.classes[0].name, "5-A Yeni");
+  assert.strictEqual(result.classes[0].students, source.students);
+  assert.strictEqual(result.classes[1], target);
+  assert.strictEqual(result.sessions, protectedData.sessions);
+  assert.strictEqual(result.workCalendar, workCalendar);
+  assert.strictEqual(result.annualPlanEntries, annualPlanEntries);
+  assert.strictEqual(result.futureField, futureField);
+});
 
 test("taşıma numara çakışmasını atlar ve geçmiş kontrolü korur", () => {
   const result = logic.applyBulkStudentAction(data, "a", ["s1", "s2"], "move", "b", () => "new");

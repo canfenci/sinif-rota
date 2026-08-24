@@ -5,7 +5,7 @@ import { Sheet } from "./components/Sheet";
 import { StatusSelector } from "./components/StatusSelector";
 import { StudentImport } from "./components/StudentImport";
 import { AnnualPlan } from "./components/AnnualPlan";
-import { activeStudentCount, applyBulkStudentAction, classNameExists, duplicateClass, nextStudentNumber, removeClass, removeStudent, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
+import { activeStudentCount, applyBulkStudentAction, classNameExists, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
 import { seedData } from "./lib/seed";
 import { checkTypes, studentStats } from "./lib/stats";
 import { localRepository } from "./lib/storage";
@@ -76,10 +76,7 @@ export default function Home() {
       if (classNameExists(data.classes, name, editTarget.item?.id)) { showToast("Bu sınıf adı zaten kullanılıyor"); return; }
       if (editTarget.item) {
         const editedId = editTarget.item.id;
-        setData((current) => ({
-          classes: current.classes.map((item) => item.id === editedId ? { ...item, name } : item),
-          sessions: current.sessions.map((session) => session.classId === editedId ? { ...session, className: name } : session),
-        }));
+        setData((current) => renameClass(current, editedId, name));
       } else {
         const id = crypto.randomUUID();
         setData((current) => ({ ...current, classes: [...current.classes, { id, name, students: [] }] }));

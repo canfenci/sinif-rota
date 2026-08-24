@@ -15,6 +15,13 @@ export function studentNumberExists(students: Student[], number: number, exceptI
   return students.some((student) => student.id !== exceptId && student.number === number);
 }
 
+export function renameClass(data: AppData, classId: string, name: string): AppData {
+  return {
+    ...data,
+    classes: data.classes.map((item) => item.id === classId ? { ...item, name } : item),
+  };
+}
+
 export function removeClass(data: AppData, classId: string): AppData {
   return {
     ...data,
@@ -26,6 +33,7 @@ export function removeClass(data: AppData, classId: string): AppData {
 
 export function removeStudent(data: AppData, classId: string, studentId: string): AppData {
   return {
+    ...data,
     classes: data.classes.map((item) => item.id !== classId ? item : {
       ...item,
       students: item.students.filter((student) => student.id !== studentId),
