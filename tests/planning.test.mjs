@@ -425,6 +425,15 @@ test("18 Ocak yalnız 8. sınıfta normal Fen haftasıdır ve 2+2 geçişi doğr
   assert.deepEqual(planWeek.items.map((item) => [item.title, item.hours]), [["Maddenin Isı ile Etkileşimi", 2], ["Türkiye’de Kimya Endüstrisi", 2]]);
 });
 
+test("eski kaydedilmiş kapsam dışı Ocak etkinliği Grade 8 planını bozmaz", () => {
+  const calendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
+  const january = calendar.breaks.find((item) => item.id === "2027-first-social");
+  delete january.grades;
+  assert.equal(logic.buildPlanWeeks(calendar, 8).find((item) => item.startDate === "2027-01-18").teachingDays, 5);
+  assert.equal(logic.buildPlanWeeks(calendar, 7).find((item) => item.startDate === "2027-01-18").teachingDays, 0);
+  assert.equal(logic.buildGrade8SciencePlan(calendar).totalHours, 140);
+});
+
 test("8. sınıf kritik 1+3 geçişini ve Basit Makineler 10 saatini korur", () => {
   const result = logic.buildGrade8SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
   assert.deepEqual(result.weeks.find((week) => week.weekStart === "2026-12-28").items.map((item) => [item.title, item.hours]), [["Kimyasal Tepkimeler", 1], ["Asitler ve Bazlar", 3]]);

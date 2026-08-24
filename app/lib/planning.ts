@@ -450,7 +450,10 @@ export function buildPlanWeeks(calendar: WorkCalendar, grade?: number): PlanWeek
       const current = addDays(weekStart, offset);
       if (current < calendarStart || current > calendarEnd) continue;
       const currentIso = isoDate(current);
-      const breaks = calendar.breaks.filter((item) => item.startDate <= currentIso && item.endDate >= currentIso && (grade === undefined || !item.grades?.length || item.grades.includes(grade)));
+      const breaks = calendar.breaks.filter((item) => {
+        const legacyGrade8JanuaryException = grade === 8 && item.id === "2027-first-social" && item.startDate === "2027-01-18" && item.endDate === "2027-01-22" && !item.grades?.length;
+        return !legacyGrade8JanuaryException && item.startDate <= currentIso && item.endDate >= currentIso && (grade === undefined || !item.grades?.length || item.grades.includes(grade));
+      });
       if (breaks.length) breaks.forEach((item) => titles.add(item.title));
       else teachingDays++;
     }
