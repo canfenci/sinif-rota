@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { buildPlanWeeks, isValidWorkCalendar, type PlanWeek } from "../lib/planning";
+import { buildGrade5SciencePlan, buildPlanWeeks, isGrade5Class, isValidWorkCalendar, type Grade5SciencePlanItem, type PlanWeek } from "../lib/planning";
 import type { AnnualPlanEntry, CalendarBreak, SchoolClass, WorkCalendar } from "../lib/types";
 import { Sheet } from "./Sheet";
 
@@ -24,22 +24,27 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
   const selectedClass = classes.find((item) => item.id === classId) ?? classes[0];
   const selectedClassId = selectedClass?.id ?? "";
   const weeks = useMemo(() => buildPlanWeeks(calendar), [calendar]);
+  const sciencePlan = useMemo(() => selectedClass && isGrade5Class(selectedClass.name) ? buildGrade5SciencePlan(calendar) : null, [calendar, selectedClass]);
+  const scienceByWeek = new Map(sciencePlan?.weeks.map((week) => [week.weekStart, week]) ?? []);
   const planEntries = entries.filter((item) => item.classId === selectedClassId && item.schoolYear === calendar.schoolYear);
   const byWeek = new Map(planEntries.map((item) => [item.weekStart, item]));
   const teachable = weeks.filter((week) => week.teachingDays > 0);
   const completed = teachable.filter((week) => byWeek.get(week.startDate)?.completed).length;
-  const planned = teachable.filter((week) => byWeek.get(week.startDate)?.topic).length;
+  const planned = teachable.filter((week) => byWeek.get(week.startDate)?.topic || scienceByWeek.has(week.startDate)).length;
   const visible = weeks.filter((week) => {
     const entry = byWeek.get(week.startDate);
-    if (filter === "planned") return Boolean(entry?.topic) && !entry?.completed;
+    const hasPlan = Boolean(entry?.topic) || scienceByWeek.has(week.startDate);
+    if (filter === "planned") return hasPlan && !entry?.completed;
     if (filter === "completed") return Boolean(entry?.completed);
-    if (filter === "empty") return week.teachingDays > 0 && !entry?.topic;
+    if (filter === "empty") return week.teachingDays > 0 && !hasPlan;
     return true;
   });
 
   function openWeek(week: PlanWeek) {
     const entry = byWeek.get(week.startDate);
-    setEntryDraft({ week, topic: entry?.topic ?? "", note: entry?.note ?? "", completed: entry?.completed ?? false });
+    const automatic = scienceByWeek.get(week.startDate);
+    const automaticTopic = automatic?.items.map((item) => `${item.title} — ${item.hours} saat`).join("\n") ?? "";
+    setEntryDraft({ week, topic: entry?.topic ?? automaticTopic, note: entry?.note ?? "", completed: entry?.completed ?? false });
   }
   function saveWeek() {
     if (!entryDraft || !selectedClassId) return;
@@ -53,7 +58,8 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       <section className="plan-summary">
         <div><p className="kicker">İŞ TAKVİMİNE GÖRE</p><h2>Hafta hafta<br />ders akışı.</h2></div>
         <button type="button" onClick={() => setCalendarOpen(true)}>Takvimi düzenle</button>
-        <dl><div><dt>Planlanan</dt><dd>{planned}/{teachable.length}</dd></div><div><dt>Tamamlanan</dt><dd>{completed}/{teachable.length}</dd></div><div><dt>İş günü</dt><dd>{teachable.reduce((sum, week) => sum + week.teachingDays, 0)}</dd></div></dl>
+        {sciencePlan && <div className="science-plan-rule"><strong>5. Sınıf Fen Bilimleri</strong><span>Haftada 4 saat · 134 saat MEB programı + 2 saat öğretmen planlama süresi</span><small>1. dönem 68 saat · 2. dönem 68 saat</small></div>}
+        <dl><div><dt>Planlanan</dt><dd>{planned}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>Tamamlanan</dt><dd>{completed}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>{sciencePlan ? "Ders saati" : "İş günü"}</dt><dd>{sciencePlan ? sciencePlan.totalHours : teachable.reduce((sum, week) => sum + week.teachingDays, 0)}</dd></div></dl>
       </section>
       <div className="plan-controls">
         <label><span>Sınıf</span><select value={selectedClassId} onChange={(event) => setClassId(event.target.value)}>{classes.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
@@ -62,12 +68,12 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       <div className="calendar-note"><strong>{fullDate.format(asDate(calendar.startDate))} – {fullDate.format(asDate(calendar.endDate))}</strong><span>Başlangıç, bitiş ve tatil dönemleri iş takviminden hesaplanır.</span></div>
       <section className="week-list" aria-label={`${selectedClass?.name} yıllık planı`}>
         {visible.map((week) => {
-          const entry = byWeek.get(week.startDate); const closed = week.teachingDays === 0;
+          const entry = byWeek.get(week.startDate); const automatic = scienceByWeek.get(week.startDate); const closed = week.teachingDays === 0;
           return <article className={`week-row ${closed ? "week-closed" : ""} ${entry?.completed ? "week-completed" : ""}`} key={week.startDate}>
             <button type="button" onClick={() => !closed && openWeek(week)} disabled={closed}>
               <span className="week-number">{String(week.number).padStart(2, "0")}</span>
-              <span className="week-copy"><small>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))} · {week.teachingDays} iş günü</small><strong>{closed ? week.breakTitles.join(" · ") || "Ders yapılmayan hafta" : entry?.topic || "Konu ekleyin"}</strong>{entry?.note && <em>{entry.note}</em>}</span>
-              <span className="week-state">{entry?.completed ? "✓ Tamam" : closed ? "Tatil" : entry?.topic ? "Planlandı" : "+ Ekle"}</span>
+              <span className="week-copy"><small>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))} · {week.teachingDays} iş günü{automatic ? ` · ${automatic.term}. dönem` : ""}</small>{closed ? <strong>{week.breakTitles.join(" · ") || "Ders yapılmayan hafta"}</strong> : entry?.topic ? <strong className="week-manual-topic">{entry.topic}</strong> : automatic ? <ScienceWeekItems items={automatic.items} /> : <strong>Konu ekleyin</strong>}{entry?.note && <em>{entry.note}</em>}</span>
+              <span className="week-state">{entry?.completed ? "✓ Tamam" : closed ? "Tatil" : entry?.topic ? "Planlandı" : automatic ? "Varsayılan" : "+ Ekle"}</span>
             </button>
           </article>;
         })}
@@ -77,6 +83,10 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
     {calendarOpen && <CalendarSheet value={calendar} onClose={() => setCalendarOpen(false)} onSave={(next) => { onCalendar(next); setCalendarOpen(false); onNotify("İş takvimi güncellendi"); }} />}
     {entryDraft && <Sheet title={`${entryDraft.week.number}. hafta planı`} onClose={() => setEntryDraft(null)}><div className="week-form"><p>{fullDate.format(asDate(entryDraft.week.startDate))} – {fullDate.format(asDate(entryDraft.week.endDate))} · {entryDraft.week.teachingDays} iş günü</p><label>Konu / kazanım<textarea data-autofocus rows={3} value={entryDraft.topic} onChange={(event) => setEntryDraft({ ...entryDraft, topic: event.target.value })} placeholder="Bu hafta işlenecek konu" /></label><label>Öğretmen notu<textarea rows={3} value={entryDraft.note} onChange={(event) => setEntryDraft({ ...entryDraft, note: event.target.value })} placeholder="İsteğe bağlı not" /></label><label className="complete-check"><input type="checkbox" checked={entryDraft.completed} onChange={(event) => setEntryDraft({ ...entryDraft, completed: event.target.checked })} /> Bu hafta tamamlandı</label><button className="primary-action" type="button" onClick={saveWeek}>Haftayı kaydet <span>→</span></button></div></Sheet>}
   </>;
+}
+
+function ScienceWeekItems({ items }: { items: Grade5SciencePlanItem[] }) {
+  return <span className="science-week-items">{items.map((item, index) => <span key={`${item.unit}-${item.outcomeCode ?? item.title}-${index}`}><strong>{item.title}</strong><b>{item.hours} saat</b>{item.extra && <em>+ ek süre</em>}</span>)}</span>;
 }
 
 function CalendarSheet({ value, onClose, onSave }: { value: WorkCalendar; onClose: () => void; onSave: (calendar: WorkCalendar) => void }) {
