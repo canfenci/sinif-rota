@@ -13,7 +13,9 @@ test("Sınıf Rota marka metadatasını yayımlar", async () => {
 
 test("hızlı kontrol aktif öğrencileri Tam durumuyla başlatır", async () => {
   const page = await read("app/page.tsx");
-  assert.match(page, /activeStudents\.map\(\(person\) => \[person\.id, "complete"\]\)/);
+  assert.match(page, /createInitialCheckStatuses\(activeStudents\)/);
+  assert.match(page, /key=\{person\.id\}/);
+  assert.match(page, /setStatuses\(\(current\) => current \? updateCheckStatus\(current, id, status\) : current\)/);
   assert.match(page, /Kontrolü Kaydet/);
 });
 

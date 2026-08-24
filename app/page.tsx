@@ -10,6 +10,7 @@ import { seedData } from "./lib/seed";
 import { checkTypes, studentHistorySessions, studentStats } from "./lib/stats";
 import { localRepository } from "./lib/storage";
 import { createDefaultWorkCalendar, updateAnnualPlanEntry } from "./lib/planning";
+import { createInitialCheckStatuses, updateCheckStatus } from "./lib/quick-check";
 import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./lib/types";
 
 type View = "home" | "classes" | "class" | "quick" | "student" | "import" | "plan";
@@ -115,7 +116,7 @@ export default function Home() {
     const activeStudents = checkClass?.students.filter((student) => student.active !== false) ?? [];
     if (!checkClass || !activeStudents.length) { showToast("Kontrol için önce aktif öğrenci ekleyin"); return; }
     if (checkClass.id !== classId) setClassId(checkClass.id);
-    setStatuses(Object.fromEntries(activeStudents.map((person) => [person.id, "complete"]))); window.scrollTo(0, 0);
+    setStatuses(createInitialCheckStatuses(activeStudents)); window.scrollTo(0, 0);
   }
   function saveCheck() {
     const checkClass = activeClasses.find((item) => item.id === classId) ?? activeClasses[0];
@@ -163,7 +164,7 @@ export default function Home() {
     {view === "home" && <HomeView classes={activeClasses} recent={recent} onQuick={() => navigate("quick")} onClass={(id) => { setClassId(id); navigate("class"); }} />}
     {view === "classes" && <ClassesView classes={data.classes} onAdd={() => openEdit({ kind: "class" })} onOpen={(id) => { setClassId(id); navigate("class"); }} onEdit={(item) => openEdit({ kind: "class", item })} />}
     {view === "class" && schoolClass && <ClassView key={`${schoolClass.id}-${bulkVersion}`} item={schoolClass} onBack={() => navigate("classes")} onQuick={() => navigate("quick")} onAdd={() => openEdit({ kind: "student" })} onImport={() => navigate("import")} onBulk={(action, studentIds) => setBulkRequest({ action, studentIds })} onOpen={(id) => { setStudentId(id); navigate("student"); }} onEdit={(item) => openEdit({ kind: "student", item })} />}
-    {view === "quick" && <QuickView classes={activeClasses} classId={classId} type={checkType} statuses={statuses} counts={counts} onClass={setClassId} onType={setCheckType} onStart={startCheck} onChange={(id, status) => setStatuses((current) => current ? { ...current, [id]: status } : current)} onBack={leaveQuickCheck} onSave={saveCheck} />}
+    {view === "quick" && <QuickView classes={activeClasses} classId={classId} type={checkType} statuses={statuses} counts={counts} onClass={setClassId} onType={setCheckType} onStart={startCheck} onChange={(id, status) => setStatuses((current) => current ? updateCheckStatus(current, id, status) : current)} onBack={leaveQuickCheck} onSave={saveCheck} />}
     {view === "student" && student && <StudentView student={student} schoolClass={schoolClass} sessions={data.sessions} onBack={() => navigate("class")} />}
     {view === "import" && schoolClass && <StudentImport schoolClass={schoolClass} onBack={() => navigate("class")} onImport={importStudents} />}
     {view === "plan" && <AnnualPlan classes={activeClasses} calendar={workCalendar} entries={data.annualPlanEntries ?? []} onCalendar={(calendar) => setData((current) => ({ ...current, workCalendar: calendar }))} onEntry={(targetClassId, weekStart, patch) => setData((current) => updateAnnualPlanEntry(current, targetClassId, workCalendar, weekStart, patch, () => crypto.randomUUID()))} onNotify={showToast} />}
