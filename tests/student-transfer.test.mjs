@@ -24,7 +24,10 @@ const sessionA = {
   date: "2026-09-07T09:00:00.000Z",
   statuses: { [student.id]: "complete" },
 };
-const initialData = { classes: [classA, classB, classC], sessions: [sessionA] };
+const workCalendar = { schoolYear: "2026-2027", startDate: "2026-09-07", endDate: "2027-06-18", breaks: [] };
+const annualPlanEntries = [{ id: "plan-a", classId: classA.id, schoolYear: "2026-2027", weekStart: "2026-09-07", topic: "Konu", note: "", completed: false }];
+const futureField = { preserved: true };
+const initialData = { classes: [classA, classB, classC], sessions: [sessionA], workCalendar, annualPlanEntries, futureField };
 
 function move(data, sourceClassId, targetClassId) {
   return dataLogic.applyBulkStudentAction(data, sourceClassId, [student.id], "move", targetClassId, () => "unused").data;
@@ -34,6 +37,9 @@ test("taşınan öğrenci yalnızca hedef sınıf listesinde kalır", () => {
   const moved = move(initialData, classA.id, classB.id);
   assert.deepEqual(moved.classes.find((item) => item.id === classA.id).students, []);
   assert.deepEqual(moved.classes.find((item) => item.id === classB.id).students, [student]);
+  assert.strictEqual(moved.workCalendar, workCalendar);
+  assert.strictEqual(moved.annualPlanEntries, annualPlanEntries);
+  assert.strictEqual(moved.futureField, futureField);
 });
 
 test("taşıma eski oturumun sınıfını ve öğrenci durumunu değiştirmez", () => {
@@ -77,7 +83,14 @@ test("A-B-C şeklindeki tekrarlı taşımalar kimliği ve tüm geçmişi korur",
   const withSessionB = { ...movedToB, sessions: [...movedToB.sessions, sessionB] };
   const movedToC = move(withSessionB, classB.id, classC.id);
   const currentStudent = movedToC.classes.find((item) => item.id === classC.id).students[0];
+  const sessionC = dataLogic.createCheckSession(classC, "Defter", { [student.id]: "partial" }, "2026-09-21T09:00:00.000Z", () => "session-c");
+  const allSessions = [...movedToC.sessions, sessionC];
   assert.equal(currentStudent.id, student.id);
   assert.deepEqual(movedToC.classes.filter((item) => item.students.some((person) => person.id === student.id)).map((item) => item.id), [classC.id]);
-  assert.deepEqual(statsLogic.studentHistorySessions(student.id, movedToC.sessions).map((session) => session.classId), [classA.id, classB.id]);
+  assert.deepEqual(statsLogic.studentHistorySessions(student.id, allSessions).map((session) => session.classId), [classA.id, classB.id, classC.id]);
+  assert.deepEqual(statsLogic.classHistorySessions(classA.id, allSessions).map((session) => session.id), ["session-a"]);
+  assert.deepEqual(statsLogic.classHistorySessions(classB.id, allSessions).map((session) => session.id), ["session-b"]);
+  assert.deepEqual(statsLogic.classHistorySessions(classC.id, allSessions).map((session) => session.id), ["session-c"]);
+  assert.strictEqual(movedToC.workCalendar, workCalendar);
+  assert.strictEqual(movedToC.annualPlanEntries, annualPlanEntries);
 });

@@ -45,6 +45,7 @@ test("sınıf adı değiştirme yalnız ilgili sınıf adını değiştirir", ()
   assert.strictEqual(result.classes[0].students, source.students);
   assert.strictEqual(result.classes[1], target);
   assert.strictEqual(result.sessions, protectedData.sessions);
+  assert.equal(result.sessions[0].className, "5-A");
   assert.strictEqual(result.workCalendar, workCalendar);
   assert.strictEqual(result.annualPlanEntries, annualPlanEntries);
   assert.strictEqual(result.futureField, futureField);
