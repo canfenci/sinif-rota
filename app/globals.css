@@ -38,3 +38,13 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 @media(max-width:620px){.app-shell{padding-bottom:calc(112px + env(safe-area-inset-bottom))}.bulk-dock>div{width:100%;flex-wrap:wrap;overflow-x:visible}}
 @media(max-width:380px){.check-row{grid-template-columns:minmax(124px,1fr) auto}.status-selector{grid-template-columns:repeat(4,44px);gap:3px}.status-button{width:44px;height:44px}}
 @media(min-width:700px){.bottom-nav{height:calc(74px + env(safe-area-inset-bottom))}.bulk-dock{bottom:calc(74px + env(safe-area-inset-bottom))}.save-dock{padding-bottom:calc(12px + env(safe-area-inset-bottom))}}
+
+/* Safe-state screen and save warning styles */
+.safe-state-container{min-height:60dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:48px 16px}
+.safe-state-icon{font-size:44px;margin-bottom:14px;line-height:1}
+.safe-state-container h1{margin:10px 0 14px;font:800 clamp(24px,6vw,34px)/1.15 var(--font-title);letter-spacing:-.03em;max-width:520px}
+.safe-state-desc{max-width:460px;margin:0 0 28px;color:var(--muted);font-size:14px;line-height:1.55}
+.safe-state-container .primary-action{max-width:280px;justify-content:center;gap:10px}
+.save-warning-banner{position:sticky;top:0;z-index:30;margin:-24px -20px 16px;padding:12px 18px;background:#fdf3d8;border-bottom:1px solid #eed69b;color:#7e4c00;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+@media(max-width:380px){.save-warning-banner{margin-left:-14px;margin-right:-14px;padding:10px 14px;font-size:12px}}
+@media(min-width:700px){.save-warning-banner{margin-top:-36px;margin-left:-36px;margin-right:-36px;padding:14px 28px}}

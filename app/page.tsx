@@ -8,7 +8,7 @@ import { AnnualPlan } from "./components/AnnualPlan";
 import { activeStudentCount, applyBulkStudentAction, classNameExists, createCheckSession, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
 import { seedData } from "./lib/seed";
 import { checkTypes, studentHistorySessions, studentStats } from "./lib/stats";
-import { localRepository } from "./lib/storage";
+import { determineSaveWarning, loadSafe, resolveAppLoadDecision, saveSafe, type AppLoadState } from "./lib/storage";
 import { createDefaultWorkCalendar, updateAnnualPlanEntry } from "./lib/planning";
 import { createInitialCheckStatuses, updateCheckStatus } from "./lib/quick-check";
 import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./lib/types";
@@ -18,8 +18,9 @@ type EditTarget = { kind: "class"; item?: SchoolClass } | { kind: "student"; ite
 type BulkRequest = { action: BulkStudentAction; studentIds: string[] };
 
 export default function Home() {
+  const [loadState, setLoadState] = useState<AppLoadState>({ status: "loading" });
   const [data, setData] = useState<AppData>(seedData);
-  const [ready, setReady] = useState(false);
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [view, setView] = useState<View>("home");
   const [classId, setClassId] = useState(seedData.classes[0].id);
   const [studentId, setStudentId] = useState("");
@@ -37,12 +38,25 @@ export default function Home() {
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      setData(localRepository.load());
-      setReady(true);
+      const result = loadSafe();
+      const decision = resolveAppLoadDecision(result);
+      setData(decision.data);
+      setLoadState(decision.loadState);
+      if (decision.migrationNotice) {
+        showToast(decision.migrationNotice);
+      }
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
-  useEffect(() => { if (ready) localRepository.save(data); }, [data, ready]);
+
+  useEffect(() => {
+    if (loadState.status !== "ready") return;
+    const saveResult = saveSafe(data);
+    const warning = determineSaveWarning(saveResult);
+    queueMicrotask(() => {
+      setSaveWarning(warning);
+    });
+  }, [data, loadState.status]);
 
   const schoolClass = data.classes.find((item) => item.id === classId) ?? data.classes[0];
   const activeClasses = data.classes.filter((item) => !item.archived);
@@ -160,7 +174,89 @@ export default function Home() {
     setEditTarget(null); navigate("classes"); showToast(archived ? "Sınıf arşivlendi" : "Sınıf yeniden etkinleştirildi", before);
   }
 
+  if (loadState.status === "loading") {
+    return (
+      <main className="app-shell">
+        <div className="safe-state-container" role="status" aria-live="polite">
+          <p className="kicker">SINIF ROTA</p>
+          <h2>Yükleniyor...</h2>
+        </div>
+      </main>
+    );
+  }
+
+  if (loadState.status === "quarantined") {
+    return (
+      <main className="app-shell">
+        <div className="safe-state-container" role="alert">
+          <div className="safe-state-icon" aria-hidden="true">⚠️</div>
+          <p className="kicker">GÜVENLİK KORUMASI</p>
+          <h1>Verilerinizi açarken bir sorun tespit edildi.</h1>
+          <p className="safe-state-desc">
+            Mevcut kayıtlarınıza dokunulmadı. Sınıf Rota güvenlik amacıyla bu oturumda veri yazmayı durdurdu.
+          </p>
+          <button
+            type="button"
+            className="primary-action"
+            onClick={() => window.location.reload()}
+          >
+            Sayfayı yeniden yükle <span>↺</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (loadState.status === "future_version") {
+    return (
+      <main className="app-shell">
+        <div className="safe-state-container" role="alert">
+          <div className="safe-state-icon" aria-hidden="true">🔒</div>
+          <p className="kicker">SÜRÜM UYUMSUZLUĞU</p>
+          <h1>Verileriniz daha yeni bir Sınıf Rota sürümüyle kaydedilmiş.</h1>
+          <p className="safe-state-desc">
+            Bu sürüm verilerinizi güvenli şekilde açamıyor. Verilerinizi korumak için kayıt işlemleri durduruldu.
+          </p>
+          <button
+            type="button"
+            className="primary-action"
+            onClick={() => window.location.reload()}
+          >
+            Sayfayı yeniden yükle <span>↺</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (loadState.status === "storage_unavailable") {
+    return (
+      <main className="app-shell">
+        <div className="safe-state-container" role="alert">
+          <div className="safe-state-icon" aria-hidden="true">🚫</div>
+          <p className="kicker">DEPOLAMA ERİŞİMİ YOK</p>
+          <h1>Tarayıcı depolama alanına erişilemiyor.</h1>
+          <p className="safe-state-desc">
+            Gizli sekme kısıtlamaları veya izinler nedeniyle yerel depolamaya erişilemedi. Verilerinizi korumak için kayıt işlemleri durduruldu.
+          </p>
+          <button
+            type="button"
+            className="primary-action"
+            onClick={() => window.location.reload()}
+          >
+            Sayfayı yeniden yükle <span>↺</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   return <main className={`app-shell ${view === "quick" && statuses ? "quick-open" : ""}`}>
+    {saveWarning && (
+      <div className="save-warning-banner" role="alert">
+        <span>⚠️ {saveWarning}</span>
+      </div>
+    )}
     {view === "home" && <HomeView classes={activeClasses} recent={recent} onQuick={() => navigate("quick")} onClass={(id) => { setClassId(id); navigate("class"); }} />}
     {view === "classes" && <ClassesView classes={data.classes} onAdd={() => openEdit({ kind: "class" })} onOpen={(id) => { setClassId(id); navigate("class"); }} onEdit={(item) => openEdit({ kind: "class", item })} />}
     {view === "class" && schoolClass && <ClassView key={`${schoolClass.id}-${bulkVersion}`} item={schoolClass} onBack={() => navigate("classes")} onQuick={() => navigate("quick")} onAdd={() => openEdit({ kind: "student" })} onImport={() => navigate("import")} onBulk={(action, studentIds) => setBulkRequest({ action, studentIds })} onOpen={(id) => { setStudentId(id); navigate("student"); }} onEdit={(item) => openEdit({ kind: "student", item })} />}

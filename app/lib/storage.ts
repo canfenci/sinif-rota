@@ -289,4 +289,71 @@ export function createLocalRepository(driver: KeyValueStorage = browserLocalStor
   };
 }
 
+export type AppLoadState =
+  | { status: "loading" }
+  | { status: "ready" }
+  | { status: "quarantined"; reason: string; sourceKey?: string }
+  | { status: "future_version"; schemaVersion: number; sourceKey?: string }
+  | { status: "storage_unavailable"; reason: string };
+
+export interface AppLoadDecision {
+  loadState: AppLoadState;
+  data: AppData;
+  writable: boolean;
+  migrationNotice?: string;
+}
+
+export function resolveAppLoadDecision(result: StorageLoadResult): AppLoadDecision {
+  switch (result.status) {
+    case "success":
+      return {
+        loadState: { status: "ready" },
+        data: result.data,
+        writable: true,
+      };
+    case "migrated":
+      return {
+        loadState: { status: "ready" },
+        data: result.data,
+        writable: true,
+        migrationNotice: "Verileriniz yeni veri formatına güvenli şekilde güncellendi.",
+      };
+    case "empty":
+      return {
+        loadState: { status: "ready" },
+        data: result.data,
+        writable: true,
+      };
+    case "quarantined":
+      return {
+        loadState: { status: "quarantined", reason: result.reason, sourceKey: result.sourceKey },
+        data: createVersionedSeedData(),
+        writable: false,
+      };
+    case "future_version":
+      return {
+        loadState: { status: "future_version", schemaVersion: result.schemaVersion, sourceKey: result.sourceKey },
+        data: createVersionedSeedData(),
+        writable: false,
+      };
+    case "storage_unavailable":
+      return {
+        loadState: { status: "storage_unavailable", reason: result.reason },
+        data: createVersionedSeedData(),
+        writable: false,
+      };
+  }
+}
+
+export function determineSaveWarning(saveResult: StorageSaveResult): string | null {
+  if (saveResult.status === "success") return null;
+  if (saveResult.status === "quota_exceeded") {
+    return "Değişiklikler kaydedilemedi. Tarayıcı depolama alanı dolu olabilir.";
+  }
+  if (saveResult.status === "storage_unavailable") {
+    return "Değişiklikler kaydedilemedi. Tarayıcı depolama erişimi kapalı.";
+  }
+  return "Değişiklikler kaydedilemedi.";
+}
+
 export const localRepository: DataRepository = createLocalRepository(browserLocalStorage);
