@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { buildGrade5SciencePlan, buildPlanWeeks, isGrade5Class, isValidWorkCalendar, type Grade5SciencePlanItem, type PlanWeek } from "../lib/planning";
+import { buildPlanWeeks, buildSciencePlanForClass, isValidWorkCalendar, type PlanWeek, type SciencePlanItem } from "../lib/planning";
 import type { AnnualPlanEntry, CalendarBreak, SchoolClass, WorkCalendar } from "../lib/types";
 import { Sheet } from "./Sheet";
 
@@ -24,7 +24,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
   const selectedClass = classes.find((item) => item.id === classId) ?? classes[0];
   const selectedClassId = selectedClass?.id ?? "";
   const weeks = useMemo(() => buildPlanWeeks(calendar), [calendar]);
-  const sciencePlan = useMemo(() => selectedClass && isGrade5Class(selectedClass.name) ? buildGrade5SciencePlan(calendar) : null, [calendar, selectedClass]);
+  const sciencePlan = useMemo(() => selectedClass ? buildSciencePlanForClass(selectedClass.name, calendar) : null, [calendar, selectedClass]);
   const scienceByWeek = new Map(sciencePlan?.weeks.map((week) => [week.weekStart, week]) ?? []);
   const planEntries = entries.filter((item) => item.classId === selectedClassId && item.schoolYear === calendar.schoolYear);
   const byWeek = new Map(planEntries.map((item) => [item.weekStart, item]));
@@ -58,7 +58,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       <section className="plan-summary">
         <div><p className="kicker">İŞ TAKVİMİNE GÖRE</p><h2>Hafta hafta<br />ders akışı.</h2></div>
         <button type="button" onClick={() => setCalendarOpen(true)}>Takvimi düzenle</button>
-        {sciencePlan && <div className="science-plan-rule"><strong>5. Sınıf Fen Bilimleri</strong><span>Haftada 4 saat · 134 saat MEB programı + 2 saat öğretmen planlama süresi</span><small>1. dönem 68 saat · 2. dönem 68 saat</small></div>}
+        {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 134 saat MEB programı + 2 saat öğretmen planlama süresi" : "Haftada 4 saat · 138 saat MEB programı · 136 saat gerçek kapasite"}</span><small>{sciencePlan.grade === 6 ? "7. ünite 16 saat · " : ""}1. dönem 68 saat · 2. dönem 68 saat</small></div>}
         <dl><div><dt>Planlanan</dt><dd>{planned}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>Tamamlanan</dt><dd>{completed}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>{sciencePlan ? "Ders saati" : "İş günü"}</dt><dd>{sciencePlan ? sciencePlan.totalHours : teachable.reduce((sum, week) => sum + week.teachingDays, 0)}</dd></div></dl>
       </section>
       <div className="plan-controls">
@@ -85,8 +85,8 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
   </>;
 }
 
-function ScienceWeekItems({ items }: { items: Grade5SciencePlanItem[] }) {
-  return <span className="science-week-items">{items.map((item, index) => <span key={`${item.unit}-${item.outcomeCode ?? item.title}-${index}`}><strong>{item.title}</strong><b>{item.hours} saat</b>{item.extra && <em>+ ek süre</em>}</span>)}</span>;
+function ScienceWeekItems({ items }: { items: SciencePlanItem[] }) {
+  return <span className="science-week-items">{items.map((item, index) => <span key={`${item.unit}-${item.outcomeCode ?? item.title}-${index}`}><strong>{item.title}</strong><b>{item.hours} saat</b>{item.badge && <em>{item.badge}</em>}</span>)}</span>;
 }
 
 function CalendarSheet({ value, onClose, onSave }: { value: WorkCalendar; onClose: () => void; onSave: (calendar: WorkCalendar) => void }) {

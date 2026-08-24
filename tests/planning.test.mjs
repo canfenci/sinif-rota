@@ -65,7 +65,7 @@ test("5. sınıf Fen Bilimleri planı iki döneme 68'er saat dağıtılır", () 
   assert.deepEqual(result.weeks.map((week) => week.totalHours), Array(34).fill(4));
   assert.equal(result.weeks.filter((week) => week.term === 1).reduce((sum, week) => sum + week.totalHours, 0), 68);
   assert.equal(result.weeks.filter((week) => week.term === 2).reduce((sum, week) => sum + week.totalHours, 0), 68);
-  assert.deepEqual({ curriculum: result.curriculumHours, extra: result.teacherExtraHours, capacity: result.totalHours }, { curriculum: 134, extra: 2, capacity: 136 });
+  assert.deepEqual({ curriculum: result.curriculumHours, extra: result.capacityAdjustmentHours, capacity: result.totalHours }, { curriculum: 134, extra: 2, capacity: 136 });
 });
 
 test("ünite toplamları ve iki özel öğrenme çıktısı korunur", () => {
@@ -74,7 +74,7 @@ test("ünite toplamları ve iki özel öğrenme çıktısı korunur", () => {
   const unitHours = new Map();
   items.forEach((item) => unitHours.set(item.unit, (unitHours.get(item.unit) ?? 0) + item.hours));
   assert.deepEqual([...unitHours.entries()], [[1, 22], [2, 26], [3, 22], [4, 14], [5, 26], [6, 16], [7, 10]]);
-  assert.equal(items.filter((item) => item.outcomeCode === "FB.5.2.3.2" && item.extra).reduce((sum, item) => sum + item.hours, 0), 2);
+  assert.equal(items.filter((item) => item.outcomeCode === "FB.5.2.3.2" && item.badge === "+ ek süre").reduce((sum, item) => sum + item.hours, 0), 2);
   assert.equal(items.filter((item) => item.outcomeCode === "FB.5.3.2.2").reduce((sum, item) => sum + item.hours, 0), 2);
 });
 
@@ -101,4 +101,51 @@ test("varsayılan Fen planı yalnız 5. sınıf ve 2026-2027 için etkinleşir",
   assert.equal(logic.isGrade5Class("5 / B"), true);
   assert.equal(logic.isGrade5Class("6-A"), false);
   assert.equal(logic.buildGrade5SciencePlan({ ...calendar, schoolYear: "2027-2028" }), null);
+});
+
+test("6. sınıf Fen Bilimleri planı 17'şer haftada toplam 136 saat üretir", () => {
+  const result = logic.buildGrade6SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  assert.ok(result);
+  assert.equal(result.weeks.length, 34);
+  assert.equal(result.weeks.filter((week) => week.term === 1).length, 17);
+  assert.equal(result.weeks.filter((week) => week.term === 2).length, 17);
+  assert.deepEqual(result.weeks.map((week) => week.totalHours), Array(34).fill(4));
+  assert.equal(result.weeks.filter((week) => week.term === 1).reduce((sum, week) => sum + week.totalHours, 0), 68);
+  assert.equal(result.weeks.filter((week) => week.term === 2).reduce((sum, week) => sum + week.totalHours, 0), 68);
+  assert.deepEqual({ curriculum: result.curriculumHours, adjustment: result.capacityAdjustmentHours, capacity: result.totalHours }, { curriculum: 138, adjustment: -2, capacity: 136 });
+});
+
+test("6. sınıf ünite süreleri 7. ünite uyarlamasıyla korunur", () => {
+  const result = logic.buildGrade6SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const items = result.weeks.flatMap((week) => week.items);
+  const unitHours = new Map();
+  items.forEach((item) => unitHours.set(item.unit, (unitHours.get(item.unit) ?? 0) + item.hours));
+  assert.deepEqual([...unitHours.entries()], [[1, 12], [2, 14], [3, 22], [4, 22], [5, 32], [6, 18], [7, 16]]);
+  assert.deepEqual(logic.grade6ScienceUnitHours.map((item) => [item.curriculumHours, item.planHours]), [[12, 12], [14, 14], [22, 22], [22, 22], [32, 32], [18, 18], [18, 16]]);
+  assert.equal(items.filter((item) => item.outcomeCode === "FB.6.7.2.2").reduce((sum, item) => sum + item.hours, 0), 2);
+});
+
+test("FB.6.4.3.4 ikinci dönemin ilk iki saatine taşınır ve ardından 5. ünite başlar", () => {
+  const result = logic.buildGrade6SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
+  const firstWeek = result.weeks.find((week) => week.weekStart === "2027-02-08");
+  assert.deepEqual(firstWeek.items.map((item) => [item.outcomeCode ?? item.unit, item.hours]), [["FB.6.4.3.4", 2], [5, 2]]);
+  assert.equal(result.weeks.filter((week) => week.term === 1).flatMap((week) => week.items).filter((item) => item.unit === 4).reduce((sum, item) => sum + item.hours, 0), 20);
+});
+
+test("6. sınıf planında Sosyal Etkinlik Haftalarına içerik atanmaz", () => {
+  const calendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
+  const plan = logic.buildGrade6SciencePlan(calendar);
+  for (const weekStart of ["2027-01-18", "2027-06-14", "2027-06-21"]) {
+    assert.equal(plan.weeks.some((item) => item.weekStart === weekStart), false);
+  }
+});
+
+test("sınıf adına göre 5. ve 6. sınıf Fen profili seçilir", () => {
+  const calendar = logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z"));
+  assert.equal(logic.isGrade6Class("6-A"), true);
+  assert.equal(logic.isGrade6Class("6 / B"), true);
+  assert.equal(logic.isGrade6Class("5-A"), false);
+  assert.equal(logic.buildSciencePlanForClass("5-A", calendar).grade, 5);
+  assert.equal(logic.buildSciencePlanForClass("6-B", calendar).grade, 6);
+  assert.equal(logic.buildSciencePlanForClass("7-A", calendar), null);
 });
