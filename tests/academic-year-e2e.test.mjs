@@ -15,12 +15,23 @@ const academicYearUrl = await transpileToDataUrl("app/lib/academic-year.ts");
 const academicYear = await import(academicYearUrl);
 const dateUtilsUrl = await transpileToDataUrl("app/lib/planning/date-utils.ts");
 
+const allocationSource = await readFile(new URL("../app/lib/planning/allocation.ts", import.meta.url), "utf8");
+let allocationOutput = ts.transpileModule(allocationSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+allocationOutput = allocationOutput.replace('from "../academic-year"', `from "${academicYearUrl}"`);
+const allocationUrl = `data:text/javascript;base64,${Buffer.from(allocationOutput).toString("base64")}`;
+
+const entryUrl = await transpileToDataUrl("app/lib/planning/entry.ts");
+
 const planningSource = await readFile(new URL("../app/lib/planning.ts", import.meta.url), "utf8");
 let planningOutput = ts.transpileModule(planningSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 planningOutput = planningOutput.replace('from "./academic-year"', `from "${academicYearUrl}"`);
 planningOutput = planningOutput.replace('from "./planning/date-utils"', `from "${dateUtilsUrl}"`);
+planningOutput = planningOutput.replace('from "./planning/allocation"', `from "${allocationUrl}"`);
+planningOutput = planningOutput.replace('from "./planning/entry"', `from "${entryUrl}"`);
 const planning = await import(`data:text/javascript;base64,${Buffer.from(planningOutput).toString("base64")}`);
 
 const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");

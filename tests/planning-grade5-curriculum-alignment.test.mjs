@@ -4,6 +4,7 @@ import test from "node:test";
 import ts from "typescript";
 
 const moduleCache = new Map();
+const dataUriMap = new Map();
 
 async function importTypeScript(relPath) {
   const fileUrl = new URL(`../${relPath}`, import.meta.url);
@@ -24,19 +25,20 @@ async function importTypeScript(relPath) {
     const kind = match[1];
     const specifiers = match[2];
     const importPath = match[3];
-    const targetRelPath = relPath.startsWith("app/lib/curriculum/")
-      ? `app/lib/curriculum/${importPath.replace(/^\.\//, "")}.ts`
-      : `app/lib/${importPath.replace(/^\.\//, "")}.ts`;
+    const baseDir = relPath.substring(0, relPath.lastIndexOf("/"));
+    const targetRelPath = importPath.startsWith("./")
+      ? `${baseDir}/${importPath.slice(2)}.ts`
+      : importPath.startsWith("../")
+        ? `${baseDir.substring(0, baseDir.lastIndexOf("/"))}/${importPath.slice(3)}.ts`
+        : `app/lib/${importPath}.ts`;
     await importTypeScript(targetRelPath);
-    const targetSource = await readFile(new URL(`../${targetRelPath}`, import.meta.url), "utf8");
-    const targetTranspiled = ts.transpileModule(targetSource, {
-      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-    }).outputText;
-    const targetDataUri = "data:text/javascript;base64," + Buffer.from(targetTranspiled).toString("base64");
+    const targetUrl = new URL(`../${targetRelPath}`, import.meta.url).pathname;
+    const targetDataUri = dataUriMap.get(targetUrl);
     transpiled = transpiled.replace(match[0], `${kind} ${specifiers} from "${targetDataUri}"`);
   }
 
   const dataUri = "data:text/javascript;base64," + Buffer.from(transpiled).toString("base64");
+  dataUriMap.set(filePath, dataUri);
   const mod = await import(dataUri);
   moduleCache.set(filePath, mod);
   return mod;

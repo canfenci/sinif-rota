@@ -1,4 +1,4 @@
-import type { AnnualPlanEntry, AppData, WorkCalendar } from "./types";
+import type { WorkCalendar } from "./types";
 import {
   isSupportedAcademicYear,
   resolveDefaultWorkCalendar,
@@ -21,6 +21,11 @@ import type {
   Grade8SciencePlan,
   ScienceBlock,
 } from "./planning/types";
+
+import { allocateScienceWeeks, distributeHoursToWeeks } from "./planning/allocation";
+import { updateAnnualPlanEntry } from "./planning/entry";
+
+export { distributeHoursToWeeks, updateAnnualPlanEntry };
 
 export type {
   PlanWeek,
@@ -405,57 +410,6 @@ function getGrade7ScienceTermWeeks(calendar: WorkCalendar) {
   return firstTerm.length === 17 && secondTerm.length === 18 ? { firstTerm, secondTerm } : null;
 }
 
-function allocateScienceWeeks(weeks: PlanWeek[], term: 1 | 2, blocks: ScienceBlock[]) {
-  let blockIndex = 0;
-  let blockRemaining = blocks[0]?.hours ?? 0;
-  let completedInBlock = blocks[0]?.initialCompletedHours ?? 0;
-  return weeks.map<SciencePlanWeek>((week) => {
-    let capacity = 4;
-    const items: SciencePlanItem[] = [];
-    while (capacity > 0 && blockIndex < blocks.length) {
-      const block = blocks[blockIndex];
-      const hours = Math.min(capacity, blockRemaining);
-      const completedBeforeHours = completedInBlock;
-      completedInBlock += hours;
-      items.push({
-        unit: block.unit,
-        unitTitle: block.unitTitle,
-        title: block.title,
-        outcomeCode: block.outcomeCode,
-        outcomeCodes: block.outcomeCodes,
-        badge: block.badge,
-        hours,
-        curriculum: block.curriculum ?? null,
-        curricula: block.curricula,
-        allocation: {
-          schoolYear: SCIENCE_PLAN_SCHOOL_YEAR,
-          grade: block.grade ?? block.curriculum?.grade ?? (block.outcomeCode?.startsWith("FB.7") ? 7 : block.outcomeCode?.startsWith("FB.6") ? 6 : 5),
-          classId: null,
-          weekId: week.startDate,
-          weekStart: week.startDate,
-          weekEnd: week.endDate,
-          outcomeCode: block.outcomeCode ?? null,
-          outcomeCodes: block.outcomeCodes,
-          allocatedHours: hours,
-          plannedTotalHours: block.plannedTotalHours ?? block.hours,
-          completedBeforeHours,
-          completedAfterHours: completedInBlock,
-          source: "auto",
-          teacherNote: null,
-          completed: false,
-        },
-      });
-      capacity -= hours;
-      blockRemaining -= hours;
-      if (blockRemaining === 0) {
-        blockIndex++;
-        blockRemaining = blocks[blockIndex]?.hours ?? 0;
-        completedInBlock = blocks[blockIndex]?.initialCompletedHours ?? 0;
-      }
-    }
-    return { weekStart: week.startDate, term, items, totalHours: items.reduce((sum, item) => sum + item.hours, 0) };
-  });
-}
 
 export function buildGrade5SciencePlan(calendar: WorkCalendar): Grade5SciencePlan | null {
   if (!isSupportedSciencePlanCalendar(calendar)) return null;
@@ -620,31 +574,4 @@ export function buildSciencePlanForClass(className: string, calendar: WorkCalend
   if (isGrade7Class(className)) return buildGrade7SciencePlan(calendar);
   if (isGrade8Class(className)) return buildGrade8SciencePlan(calendar);
   return null;
-}
-
-export function distributeHoursToWeeks(durations: number[], weeklyHours = 4) {
-  const weeks: number[][] = [];
-  let current: number[] = [];
-  let capacity = weeklyHours;
-  for (const duration of durations) {
-    let remaining = duration;
-    while (remaining > 0) {
-      const hours = Math.min(capacity, remaining);
-      current.push(hours);
-      capacity -= hours;
-      remaining -= hours;
-      if (capacity === 0) { weeks.push(current); current = []; capacity = weeklyHours; }
-    }
-  }
-  if (current.length) weeks.push(current);
-  return weeks;
-}
-
-export function updateAnnualPlanEntry(data: AppData, classId: string, calendar: WorkCalendar, weekStart: string, patch: Pick<AnnualPlanEntry, "topic" | "note" | "completed">, idFactory: () => string): AppData {
-  const entries = data.annualPlanEntries ?? [];
-  const existing = entries.find((item) => item.classId === classId && item.schoolYear === calendar.schoolYear && item.weekStart === weekStart);
-  const clean = { topic: patch.topic.trim(), note: patch.note.trim(), completed: patch.completed };
-  if (!clean.topic && !clean.note && !clean.completed) return { ...data, annualPlanEntries: entries.filter((item) => item !== existing) };
-  const entry: AnnualPlanEntry = { id: existing?.id ?? idFactory(), classId, schoolYear: calendar.schoolYear, weekStart, ...clean };
-  return { ...data, annualPlanEntries: existing ? entries.map((item) => item === existing ? entry : item) : [...entries, entry] };
 }
