@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { isSupportedAcademicYear, type CalendarSupportState } from "../lib/academic-year";
 import { buildPlanWeeks, buildSciencePlanForClass, isValidWorkCalendar, type PlanWeek, type SciencePlanItem } from "../lib/planning";
 import type { AnnualPlanEntry, CalendarBreak, SchoolClass, WorkCalendar } from "../lib/types";
 import { Sheet } from "./Sheet";
@@ -9,9 +10,10 @@ const shortDate = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "sho
 const fullDate = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const asDate = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
-export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, onNotify }: {
+export function AnnualPlan({ classes, calendar, calendarSupportState, entries, onCalendar, onEntry, onNotify }: {
   classes: SchoolClass[];
   calendar: WorkCalendar;
+  calendarSupportState: CalendarSupportState;
   entries: AnnualPlanEntry[];
   onCalendar: (calendar: WorkCalendar) => void;
   onEntry: (classId: string, weekStart: string, patch: Pick<AnnualPlanEntry, "topic" | "note" | "completed">) => void;
@@ -23,6 +25,7 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
   const [entryDraft, setEntryDraft] = useState<EntryDraft | null>(null);
   const selectedClass = classes.find((item) => item.id === classId) ?? classes[0];
   const selectedClassId = selectedClass?.id ?? "";
+  const isHistorical = calendarSupportState === "supported_historical";
   const sciencePlan = useMemo(() => selectedClass ? buildSciencePlanForClass(selectedClass.name, calendar) : null, [calendar, selectedClass]);
   const weeks = useMemo(() => buildPlanWeeks(calendar, sciencePlan?.grade), [calendar, sciencePlan?.grade]);
   const scienceByWeek = new Map(sciencePlan?.weeks.map((week) => [week.weekStart, week]) ?? []);
@@ -53,11 +56,11 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
   }
 
   return <>
-    <header className="page-header"><div className="brand-mark" aria-label="Sınıf Rota">SR</div><div><p className="eyebrow">{calendar.schoolYear} EĞİTİM YILI</p><h1>Yıllık Plan</h1></div></header>
+    <header className="page-header"><div className="brand-mark" aria-label="Sınıf Rota">SR</div><div><p className="eyebrow">{calendar.schoolYear} EĞİTİM YILI</p><h1>Yıllık Plan</h1>{calendarSupportState === "supported_historical" && <p className="historical-year-badge" role="status">Geçmiş Eğitim Yılı ({calendar.schoolYear.replace("-", "–")})</p>}</div></header>
     {!classes.length ? <div className="plan-empty"><strong>Plan için aktif sınıf yok</strong><p>Önce Sınıflar bölümünden bir sınıf oluşturun.</p></div> : <>
       <section className="plan-summary">
         <div><p className="kicker">İŞ TAKVİMİNE GÖRE</p><h2>Hafta hafta<br />ders akışı.</h2></div>
-        <button type="button" onClick={() => setCalendarOpen(true)}>Takvimi düzenle</button>
+        {!isHistorical && <button type="button" onClick={() => setCalendarOpen(true)}>Takvimi düzenle</button>}
         {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 4 saat laboratuvar güvenliği + 136 saat öğrenme çıktıları" : sciencePlan.grade === 8 ? "Haftada 4 saat · 132 saat kazanım + 8 saat mühendislik / proje" : "Haftada 4 saat · 138 saat resmî program + 2 saat öğretmen planlama"}</span><small>Toplam 140 saat · 1. dönem {sciencePlan.firstTermHours} saat · 2. dönem {sciencePlan.secondTermHours} saat</small></div>}
         <dl><div><dt>Planlanan</dt><dd>{planned}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>Tamamlanan</dt><dd>{completed}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>{sciencePlan ? "Ders saati" : "İş günü"}</dt><dd>{sciencePlan ? sciencePlan.totalHours : teachable.reduce((sum, week) => sum + week.teachingDays, 0)}</dd></div></dl>
       </section>
@@ -69,11 +72,11 @@ export function AnnualPlan({ classes, calendar, entries, onCalendar, onEntry, on
       <section className="week-list" aria-label={`${selectedClass?.name} yıllık planı`}>
         {visible.map((week) => {
           const entry = byWeek.get(week.startDate); const automatic = scienceByWeek.get(week.startDate); const closed = week.teachingDays === 0 && !automatic;
-          return <article className={`week-row ${closed ? "week-closed" : ""} ${entry?.completed ? "week-completed" : ""}`} key={week.startDate}>
-            <button type="button" onClick={() => !closed && openWeek(week)} disabled={closed}>
+          return <article className={`week-row ${closed ? "week-closed" : ""} ${entry?.completed ? "week-completed" : ""} ${isHistorical ? "plan-historical" : ""}`} key={week.startDate}>
+            <button type="button" onClick={() => !closed && !isHistorical && openWeek(week)} disabled={closed || isHistorical}>
               <span className="week-number">{String(week.number).padStart(2, "0")}</span>
               <span className="week-copy"><small>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))} · {week.teachingDays} iş günü{automatic ? ` · ${automatic.term}. dönem` : ""}</small>{closed ? <strong>{week.breakTitles.join(" · ") || "Ders yapılmayan hafta"}</strong> : entry?.topic ? <strong className="week-manual-topic">{entry.topic}</strong> : automatic ? <ScienceWeekItems items={automatic.items} /> : <strong>Konu ekleyin</strong>}{entry?.note && <em>{entry.note}</em>}</span>
-              <span className="week-state">{entry?.completed ? "✓ Tamam" : closed ? "Tatil" : entry?.topic ? "Planlandı" : automatic ? "Varsayılan" : "+ Ekle"}</span>
+              <span className="week-state">{closed ? "Tatil" : isHistorical ? "Geçmiş kayıt" : entry?.completed ? "✓ Tamam" : entry?.topic ? "Planlandı" : automatic ? "Varsayılan" : "+ Ekle"}</span>
             </button>
           </article>;
         })}
@@ -117,6 +120,7 @@ function CalendarSheet({ value, onClose, onSave }: { value: WorkCalendar; onClos
     setDraft({ ...draft, breaks: [...draft.breaks, item].sort((a, b) => a.startDate.localeCompare(b.startDate)) }); setTitle(""); setStartDate(""); setEndDate(""); setError("");
   }
   function submit() {
+    if (!isSupportedAcademicYear(draft.schoolYear)) { setError("Bu eğitim yılı için resmî MEB çalışma takvimi henüz sisteme eklenmemiştir."); return; }
     if (!isValidWorkCalendar(draft)) { setError("Eğitim yılı ile başlangıç ve bitiş tarihlerini kontrol edin."); return; }
     onSave(draft);
   }
