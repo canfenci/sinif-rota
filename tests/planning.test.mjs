@@ -17,6 +17,13 @@ async function importTypeScript(path) {
     const dateUtilsUrl = `data:text/javascript;base64,${Buffer.from(dateUtilsOutput).toString("base64")}`;
     output = output.replace('from "./planning/date-utils"', `from "${dateUtilsUrl}"`);
 
+    const calendarSource = await readFile(new URL("../app/lib/planning/calendar.ts", import.meta.url), "utf8");
+    let calendarOutput = ts.transpileModule(calendarSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    calendarOutput = calendarOutput.replace('from "../academic-year"', `from "${dependencyUrl}"`);
+    calendarOutput = calendarOutput.replace('from "./date-utils"', `from "${dateUtilsUrl}"`);
+    const calendarUrl = `data:text/javascript;base64,${Buffer.from(calendarOutput).toString("base64")}`;
+    output = output.replace('from "./planning/calendar"', `from "${calendarUrl}"`);
+
     const allocationSource = await readFile(new URL("../app/lib/planning/allocation.ts", import.meta.url), "utf8");
     let allocationOutput = ts.transpileModule(allocationSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
     allocationOutput = allocationOutput.replace('from "../academic-year"', `from "${dependencyUrl}"`);
