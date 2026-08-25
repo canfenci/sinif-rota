@@ -147,7 +147,7 @@ export const grade5ScienceCurriculum: CurriculumOutcome[] = [
   ...["FB.5.3.1.1", "FB.5.3.1.2", "FB.5.3.2.1", "FB.5.3.2.2"].map((code) => grade5Outcome(3, code)),
   ...["FB.5.4.1.1", "FB.5.4.2.1", "FB.5.4.3.1"].map((code) => grade5Outcome(4, code)),
   ...["FB.5.5.1.1", "FB.5.5.2.1", "FB.5.5.2.2", "FB.5.5.3.1", "FB.5.5.4.1", "FB.5.5.4.2"].map((code) => grade5Outcome(5, code)),
-  ...["FB.5.6.1.1", "FB.5.6.1.2", "FB.5.6.2.1", "FB.5.6.2.2"].map((code) => grade5Outcome(6, code)),
+  ...["FB.5.6.1.1", "FB.5.6.1.2", "FB.5.6.2.1"].map((code) => grade5Outcome(6, code)),
   ...["FB.5.7.1.1", "FB.5.7.1.2", "FB.5.7.1.3"].map((code) => grade5Outcome(7, code)),
 ];
 
@@ -562,7 +562,7 @@ export function buildGrade5SciencePlan(calendar: WorkCalendar): Grade5SciencePla
     grade5Block(3, "FB.5.3.2.1", 2, { initialCompletedHours: 6, plannedTotalHours: 8 }), grade5Block(3, "FB.5.3.2.2", 2),
     grade5Block(4, "FB.5.4.1.1", 4), grade5Block(4, "FB.5.4.2.1", 4), grade5Block(4, "FB.5.4.3.1", 6),
     grade5Block(5, "FB.5.5.1.1", 4), grade5Block(5, "FB.5.5.2.1", 4), grade5Block(5, "FB.5.5.2.2", 4), grade5Block(5, "FB.5.5.3.1", 6), grade5Block(5, "FB.5.5.4.1", 4), grade5Block(5, "FB.5.5.4.2", 4),
-    grade5Block(6, "FB.5.6.1.1", 2), grade5Block(6, "FB.5.6.1.2", 4), grade5Block(6, "FB.5.6.2.1", 4), grade5Block(6, "FB.5.6.2.2", 6),
+    grade5Block(6, "FB.5.6.1.1", 2), grade5Block(6, "FB.5.6.1.2", 4), grade5Block(6, "FB.5.6.2.1", 4, { plannedTotalHours: 10 }), grade5Block(6, "FB.5.6.2.1", 6, { initialCompletedHours: 4, plannedTotalHours: 10 }),
     grade5Block(7, "FB.5.7.1.1", 4), grade5Block(7, "FB.5.7.1.2", 4), grade5Block(7, "FB.5.7.1.3", 4),
   ];
 
