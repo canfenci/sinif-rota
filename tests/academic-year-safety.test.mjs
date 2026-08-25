@@ -13,12 +13,14 @@ async function transpileToDataUrl(path) {
 
 const academicYearUrl = await transpileToDataUrl("app/lib/academic-year.ts");
 const academicYear = await import(academicYearUrl);
+const dateUtilsUrl = await transpileToDataUrl("app/lib/planning/date-utils.ts");
 
 const planningSource = await readFile(new URL("../app/lib/planning.ts", import.meta.url), "utf8");
 let planningOutput = ts.transpileModule(planningSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 planningOutput = planningOutput.replace('from "./academic-year"', `from "${academicYearUrl}"`);
+planningOutput = planningOutput.replace('from "./planning/date-utils"', `from "${dateUtilsUrl}"`);
 const planning = await import(`data:text/javascript;base64,${Buffer.from(planningOutput).toString("base64")}`);
 
 const utcDate = (date) => new Date(`${date}T00:00:00.000Z`);

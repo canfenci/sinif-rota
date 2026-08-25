@@ -11,6 +11,11 @@ async function importTypeScript(path) {
     const dependencyOutput = ts.transpileModule(dependencySource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
     const dependencyUrl = `data:text/javascript;base64,${Buffer.from(dependencyOutput).toString("base64")}`;
     output = output.replace('from "./academic-year"', `from "${dependencyUrl}"`);
+
+    const dateUtilsSource = await readFile(new URL("../app/lib/planning/date-utils.ts", import.meta.url), "utf8");
+    const dateUtilsOutput = ts.transpileModule(dateUtilsSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    const dateUtilsUrl = `data:text/javascript;base64,${Buffer.from(dateUtilsOutput).toString("base64")}`;
+    output = output.replace('from "./planning/date-utils"', `from "${dateUtilsUrl}"`);
   }
   return import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
 }
