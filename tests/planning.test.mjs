@@ -5,7 +5,13 @@ import ts from "typescript";
 
 async function importTypeScript(path) {
   const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
-  const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+  let output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+  if (path === "app/lib/planning.ts") {
+    const dependencySource = await readFile(new URL("../app/lib/academic-year.ts", import.meta.url), "utf8");
+    const dependencyOutput = ts.transpileModule(dependencySource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    const dependencyUrl = `data:text/javascript;base64,${Buffer.from(dependencyOutput).toString("base64")}`;
+    output = output.replace('from "./academic-year"', `from "${dependencyUrl}"`);
+  }
   return import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
 }
 

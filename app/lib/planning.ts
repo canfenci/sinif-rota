@@ -1,4 +1,9 @@
 import type { AnnualPlanEntry, AppData, WorkCalendar } from "./types";
+import {
+  isSupportedAcademicYear,
+  resolveDefaultWorkCalendar,
+  SUPPORTED_ACADEMIC_YEARS,
+} from "./academic-year";
 
 const DAY = 86_400_000;
 
@@ -76,7 +81,7 @@ export interface SciencePlanWeek {
 
 export interface SciencePlan {
   grade: 5 | 6 | 7 | 8;
-  schoolYear: "2026-2027";
+  schoolYear: (typeof SUPPORTED_ACADEMIC_YEARS)[number];
   weeklyHours: 4;
   curriculumHours: number;
   capacityAdjustmentHours: number;
@@ -403,31 +408,14 @@ function grade8Block(unit: number, title: string, codes: string[], hours: number
   return { grade: 8, unit, unitTitle: grade8UnitTitles.get(unit) ?? `${unit}. Ünite`, title, outcomeCode: codes[0], outcomeCodes: codes, curriculum: curricula[0], curricula, hours, ...options };
 }
 
-const calendar20262027: WorkCalendar = {
-  schoolYear: "2026-2027",
-  startDate: "2026-09-14",
-  endDate: "2027-06-25",
-  breaks: [
-    { id: "2026-first-break", title: "1. Dönem Ara Tatili", startDate: "2026-11-16", endDate: "2026-11-20" },
-    { id: "2027-first-social", title: "Sosyal Etkinlik Haftası", startDate: "2027-01-18", endDate: "2027-01-22", grades: [5, 6, 7] },
-    { id: "2027-semester-break", title: "Yarıyıl Tatili", startDate: "2027-01-25", endDate: "2027-02-05" },
-    { id: "2027-second-break", title: "2. Dönem Ara Tatili", startDate: "2027-03-08", endDate: "2027-03-12" },
-    { id: "2027-second-social-2", title: "Sosyal Etkinlik Haftası", startDate: "2027-06-21", endDate: "2027-06-25", grades: [5, 6, 7] },
-  ],
-};
+const SCIENCE_PLAN_SCHOOL_YEAR = SUPPORTED_ACADEMIC_YEARS[0];
 
-export function createDefaultWorkCalendar(now = new Date()): WorkCalendar {
-  const year = now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
-  if (year === 2026) return { ...calendar20262027, breaks: calendar20262027.breaks.map((item) => ({ ...item })) };
-  let start = new Date(Date.UTC(year, 8, 1));
-  while (start.getUTCDay() !== 1) start = addDays(start, 1);
-  const june = new Date(Date.UTC(year + 1, 5, 1));
-  let fridayCount = 0;
-  let end = june;
-  for (let day = june; day.getUTCMonth() === 5; day = addDays(day, 1)) {
-    if (day.getUTCDay() === 5 && ++fridayCount === 3) { end = day; break; }
-  }
-  return { schoolYear: `${year}-${year + 1}`, startDate: isoDate(start), endDate: isoDate(end), breaks: [] };
+export function createDefaultWorkCalendar(now = new Date()): WorkCalendar | null {
+  return resolveDefaultWorkCalendar(now).calendar;
+}
+
+function isSupportedSciencePlanCalendar(calendar: WorkCalendar) {
+  return isSupportedAcademicYear(calendar.schoolYear) && calendar.schoolYear === SCIENCE_PLAN_SCHOOL_YEAR;
 }
 
 export function isValidWorkCalendar(calendar: WorkCalendar) {
@@ -516,7 +504,7 @@ function allocateScienceWeeks(weeks: PlanWeek[], term: 1 | 2, blocks: ScienceBlo
         curriculum: block.curriculum ?? null,
         curricula: block.curricula,
         allocation: {
-          schoolYear: "2026-2027",
+          schoolYear: SCIENCE_PLAN_SCHOOL_YEAR,
           grade: block.grade ?? block.curriculum?.grade ?? (block.outcomeCode?.startsWith("FB.7") ? 7 : block.outcomeCode?.startsWith("FB.6") ? 6 : 5),
           classId: null,
           weekId: week.startDate,
@@ -546,7 +534,7 @@ function allocateScienceWeeks(weeks: PlanWeek[], term: 1 | 2, blocks: ScienceBlo
 }
 
 export function buildGrade5SciencePlan(calendar: WorkCalendar): Grade5SciencePlan | null {
-  if (calendar.schoolYear !== "2026-2027") return null;
+  if (!isSupportedSciencePlanCalendar(calendar)) return null;
   const weeks = buildPlanWeeks(calendar, 5);
   const firstTerm = weeks.filter((week) => week.startDate >= "2026-09-14" && week.startDate < "2027-01-18" && week.teachingDays > 0);
   const secondTerm = weeks.filter((week) => week.startDate >= "2027-02-08" && week.startDate < "2027-06-21" && week.teachingDays > 0);
@@ -568,7 +556,7 @@ export function buildGrade5SciencePlan(calendar: WorkCalendar): Grade5SciencePla
 
   return {
     grade: 5,
-    schoolYear: "2026-2027",
+    schoolYear: SCIENCE_PLAN_SCHOOL_YEAR,
     weeklyHours: 4,
     curriculumHours: 140,
     capacityAdjustmentHours: 0,
@@ -583,7 +571,7 @@ export function buildGrade5SciencePlan(calendar: WorkCalendar): Grade5SciencePla
 }
 
 export function buildGrade6SciencePlan(calendar: WorkCalendar): Grade6SciencePlan | null {
-  if (calendar.schoolYear !== "2026-2027") return null;
+  if (!isSupportedSciencePlanCalendar(calendar)) return null;
   const termWeeks = getGrade6ScienceTermWeeks(calendar);
   if (!termWeeks) return null;
 
@@ -602,7 +590,7 @@ export function buildGrade6SciencePlan(calendar: WorkCalendar): Grade6SciencePla
 
   return {
     grade: 6,
-    schoolYear: "2026-2027",
+    schoolYear: SCIENCE_PLAN_SCHOOL_YEAR,
     weeklyHours: 4,
     curriculumHours: 138,
     capacityAdjustmentHours: 2,
@@ -617,7 +605,7 @@ export function buildGrade6SciencePlan(calendar: WorkCalendar): Grade6SciencePla
 }
 
 export function buildGrade7SciencePlan(calendar: WorkCalendar): Grade7SciencePlan | null {
-  if (calendar.schoolYear !== "2026-2027") return null;
+  if (!isSupportedSciencePlanCalendar(calendar)) return null;
   const termWeeks = getGrade7ScienceTermWeeks(calendar);
   if (!termWeeks) return null;
 
@@ -636,7 +624,7 @@ export function buildGrade7SciencePlan(calendar: WorkCalendar): Grade7SciencePla
 
   return {
     grade: 7,
-    schoolYear: "2026-2027",
+    schoolYear: SCIENCE_PLAN_SCHOOL_YEAR,
     weeklyHours: 4,
     curriculumHours: 138,
     capacityAdjustmentHours: 2,
@@ -651,7 +639,7 @@ export function buildGrade7SciencePlan(calendar: WorkCalendar): Grade7SciencePla
 }
 
 export function buildGrade8SciencePlan(calendar: WorkCalendar): Grade8SciencePlan | null {
-  if (calendar.schoolYear !== "2026-2027") return null;
+  if (!isSupportedSciencePlanCalendar(calendar)) return null;
   const weeks = buildPlanWeeks(calendar, 8);
   const firstTerm = weeks.filter((week) => week.startDate >= "2026-09-14" && week.startDate < "2027-01-25" && week.teachingDays > 0);
   const secondTerm = weeks.filter((week) => week.startDate >= "2027-02-08" && week.startDate < "2027-06-14" && week.teachingDays > 0);
@@ -688,7 +676,7 @@ export function buildGrade8SciencePlan(calendar: WorkCalendar): Grade8SciencePla
 
   return {
     grade: 8,
-    schoolYear: "2026-2027",
+    schoolYear: SCIENCE_PLAN_SCHOOL_YEAR,
     weeklyHours: 4,
     curriculumHours: 132,
     capacityAdjustmentHours: 8,
