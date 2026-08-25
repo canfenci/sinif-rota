@@ -56,17 +56,31 @@ grade8Output = grade8Output.replace('from "./calendar"', `from "${calendarUrl}"`
 grade8Output = grade8Output.replace('from "./allocation"', `from "${allocationUrl}"`);
 const grade8Url = `data:text/javascript;base64,${Buffer.from(grade8Output).toString("base64")}`;
 
+const gradeRouterSource = await readFile(new URL("../app/lib/planning/grade-router.ts", import.meta.url), "utf8");
+let gradeRouterOutput = ts.transpileModule(gradeRouterSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+gradeRouterOutput = gradeRouterOutput.replace('from "./grade5"', `from "${grade5Url}"`);
+gradeRouterOutput = gradeRouterOutput.replace('from "./grade6"', `from "${grade6Url}"`);
+gradeRouterOutput = gradeRouterOutput.replace('from "./grade7"', `from "${grade7Url}"`);
+gradeRouterOutput = gradeRouterOutput.replace('from "./grade8"', `from "${grade8Url}"`);
+const gradeRouterUrl = `data:text/javascript;base64,${Buffer.from(gradeRouterOutput).toString("base64")}`;
+
+const indexSource = await readFile(new URL("../app/lib/planning/index.ts", import.meta.url), "utf8");
+let indexOutput = ts.transpileModule(indexSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+indexOutput = indexOutput.replace('from "./calendar"', `from "${calendarUrl}"`);
+indexOutput = indexOutput.replace('from "./allocation"', `from "${allocationUrl}"`);
+indexOutput = indexOutput.replace('from "./entry"', `from "${entryUrl}"`);
+indexOutput = indexOutput.replace('from "./grade5"', `from "${grade5Url}"`);
+indexOutput = indexOutput.replace('from "./grade6"', `from "${grade6Url}"`);
+indexOutput = indexOutput.replace('from "./grade7"', `from "${grade7Url}"`);
+indexOutput = indexOutput.replace('from "./grade8"', `from "${grade8Url}"`);
+indexOutput = indexOutput.replace('from "./grade-router"', `from "${gradeRouterUrl}"`);
+const indexUrl = `data:text/javascript;base64,${Buffer.from(indexOutput).toString("base64")}`;
+
 const planningSource = await readFile(new URL("../app/lib/planning.ts", import.meta.url), "utf8");
 let planningOutput = ts.transpileModule(planningSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-planningOutput = planningOutput.replace('from "./planning/calendar"', `from "${calendarUrl}"`);
-planningOutput = planningOutput.replace('from "./planning/allocation"', `from "${allocationUrl}"`);
-planningOutput = planningOutput.replace('from "./planning/entry"', `from "${entryUrl}"`);
-planningOutput = planningOutput.replace('from "./planning/grade5"', `from "${grade5Url}"`);
-planningOutput = planningOutput.replace('from "./planning/grade6"', `from "${grade6Url}"`);
-planningOutput = planningOutput.replace('from "./planning/grade7"', `from "${grade7Url}"`);
-planningOutput = planningOutput.replace('from "./planning/grade8"', `from "${grade8Url}"`);
+planningOutput = planningOutput.replace('from "./planning/index"', `from "${indexUrl}"`);
 const planning = await import(`data:text/javascript;base64,${Buffer.from(planningOutput).toString("base64")}`);
 
 const utcDate = (date) => new Date(`${date}T00:00:00.000Z`);

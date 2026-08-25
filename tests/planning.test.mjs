@@ -61,7 +61,28 @@ async function importTypeScript(path) {
     grade8Output = grade8Output.replace('from "./calendar"', `from "${calendarUrl}"`);
     grade8Output = grade8Output.replace('from "./allocation"', `from "${allocationUrl}"`);
     const grade8Url = `data:text/javascript;base64,${Buffer.from(grade8Output).toString("base64")}`;
-    output = output.replace('from "./planning/grade8"', `from "${grade8Url}"`);
+
+    const gradeRouterSource = await readFile(new URL("../app/lib/planning/grade-router.ts", import.meta.url), "utf8");
+    let gradeRouterOutput = ts.transpileModule(gradeRouterSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    gradeRouterOutput = gradeRouterOutput.replace('from "./grade5"', `from "${grade5Url}"`);
+    gradeRouterOutput = gradeRouterOutput.replace('from "./grade6"', `from "${grade6Url}"`);
+    gradeRouterOutput = gradeRouterOutput.replace('from "./grade7"', `from "${grade7Url}"`);
+    gradeRouterOutput = gradeRouterOutput.replace('from "./grade8"', `from "${grade8Url}"`);
+    const gradeRouterUrl = `data:text/javascript;base64,${Buffer.from(gradeRouterOutput).toString("base64")}`;
+
+    const indexSource = await readFile(new URL("../app/lib/planning/index.ts", import.meta.url), "utf8");
+    let indexOutput = ts.transpileModule(indexSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    indexOutput = indexOutput.replace('from "./calendar"', `from "${calendarUrl}"`);
+    indexOutput = indexOutput.replace('from "./allocation"', `from "${allocationUrl}"`);
+    indexOutput = indexOutput.replace('from "./entry"', `from "${entryUrl}"`);
+    indexOutput = indexOutput.replace('from "./grade5"', `from "${grade5Url}"`);
+    indexOutput = indexOutput.replace('from "./grade6"', `from "${grade6Url}"`);
+    indexOutput = indexOutput.replace('from "./grade7"', `from "${grade7Url}"`);
+    indexOutput = indexOutput.replace('from "./grade8"', `from "${grade8Url}"`);
+    indexOutput = indexOutput.replace('from "./grade-router"', `from "${gradeRouterUrl}"`);
+    const indexUrl = `data:text/javascript;base64,${Buffer.from(indexOutput).toString("base64")}`;
+
+    output = output.replace('from "./planning/index"', `from "${indexUrl}"`);
   }
   return import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
 }
