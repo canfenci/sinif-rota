@@ -11,6 +11,7 @@ import { checkTypes, studentHistorySessions, studentStats } from "./lib/stats";
 import { determineSaveWarning, downloadEmergencyExport, loadSafe, prepareEmergencyExport, resolveAppLoadDecision, saveSafe, type AppLoadState } from "./lib/storage";
 import { getCalendarSupportState, resolveDefaultWorkCalendar } from "./lib/academic-year";
 import { updateAnnualPlanEntry } from "./lib/planning";
+import { BUILD_INFO } from "./lib/build-info";
 import { createInitialCheckStatuses, updateCheckStatus } from "./lib/quick-check";
 import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./lib/types";
 
@@ -38,6 +39,7 @@ export default function Home() {
   const toastTimer = useRef<number | null>(null);
 
   useEffect(() => {
+    console.info(`[Sınıf Rota] ${BUILD_INFO.display} (v${BUILD_INFO.version}) aktif.`);
     const frame = window.requestAnimationFrame(() => {
       const result = loadSafe();
       const decision = resolveAppLoadDecision(result);
@@ -317,7 +319,7 @@ function AppHeader({ eyebrow, title, back }: { eyebrow: string; title: string; b
 
 function HomeView({ classes, recent, onQuick, onClass }: { classes: SchoolClass[]; recent: AppData["sessions"]; onQuick: () => void; onClass: (id: string) => void }) {
   const date = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long", timeZone: "Europe/Istanbul" }).format(new Date());
-  return <><AppHeader eyebrow={date.toLocaleUpperCase("tr-TR")} title="Günaydın, Öğretmenim" /><section className="hero"><p className="kicker">GÜNLÜK TAKİP</p><h2>Sınıf kontrolüne<br />hemen başlayın.</h2><button className="primary-action" onClick={onQuick}>Hızlı Kontrol <span>→</span></button></section><section className="content-section"><div className="section-heading"><div><p className="kicker">SINIFLAR</p><h3>Bugün nereden devam?</h3></div></div>{classes.length ? <div className="class-list">{classes.slice(0, 3).map((item) => <button className="class-row" key={item.id} onClick={() => onClass(item.id)}><span className="class-name">{item.name}</span><span className="class-meta">{activeStudentCount(item)} aktif öğrenci</span><span className="arrow">→</span></button>)}</div> : <EmptyState title="Henüz sınıf yok" text="Sınıflar bölümünden ilk sınıfınızı ekleyin." />}</section>{recent.length > 0 && <section className="content-section compact"><p className="kicker">SON KONTROLLER</p>{recent.map((item) => <div className="recent-row" key={item.id}><strong>{item.className}</strong><span>{item.type}</span><time dateTime={item.date}>{new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "short" }).format(new Date(item.date))}</time></div>)}</section>}</>;
+  return <><AppHeader eyebrow={date.toLocaleUpperCase("tr-TR")} title="Günaydın, Öğretmenim" /><section className="hero"><p className="kicker">GÜNLÜK TAKİP</p><h2>Sınıf kontrolüne<br />hemen başlayın.</h2><button className="primary-action" onClick={onQuick}>Hızlı Kontrol <span>→</span></button></section><section className="content-section"><div className="section-heading"><div><p className="kicker">SINIFLAR</p><h3>Bugün nereden devam?</h3></div></div>{classes.length ? <div className="class-list">{classes.slice(0, 3).map((item) => <button className="class-row" key={item.id} onClick={() => onClass(item.id)}><span className="class-name">{item.name}</span><span className="class-meta">{activeStudentCount(item)} aktif öğrenci</span><span className="arrow">→</span></button>)}</div> : <EmptyState title="Henüz sınıf yok" text="Sınıflar bölümünden ilk sınıfınızı ekleyin." />}</section>{recent.length > 0 && <section className="content-section compact"><p className="kicker">SON KONTROLLER</p>{recent.map((item) => <div className="recent-row" key={item.id}><strong>{item.className}</strong><span>{item.type}</span><time dateTime={item.date}>{new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "short" }).format(new Date(item.date))}</time></div>)}</section>}<footer className="app-footer" role="contentinfo"><p>Sınıf Rota · {BUILD_INFO.display}</p></footer></>;
 }
 
 function ClassesView({ classes, onAdd, onOpen, onEdit }: { classes: SchoolClass[]; onAdd: () => void; onOpen: (id: string) => void; onEdit: (item: SchoolClass) => void }) {

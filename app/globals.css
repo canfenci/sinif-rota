@@ -52,3 +52,4 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .safe-state-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px}
 .safe-state-subnote{margin:16px 0 0;color:var(--muted);font-size:12px;line-height:1.4;max-width:420px}
 .export-action{width:100%;min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px}
+.app-footer{margin-top:36px;padding:16px 0;text-align:center;color:var(--muted);font-size:11px;letter-spacing:.05em;opacity:.75}

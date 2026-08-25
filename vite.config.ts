@@ -1,7 +1,22 @@
+import { execSync } from "node:child_process";
 import { sites } from "@openai/sites-vite-plugin";
 import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
+
+function getGitCommitHash(): string {
+  if (process.env.NEXT_PUBLIC_COMMIT_HASH) {
+    return process.env.NEXT_PUBLIC_COMMIT_HASH.slice(0, 7);
+  }
+  if (process.env.CF_PAGES_COMMIT_SHA) {
+    return process.env.CF_PAGES_COMMIT_SHA.slice(0, 7);
+  }
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
@@ -44,6 +59,9 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    define: {
+      __COMMIT_HASH__: JSON.stringify(getGitCommitHash()),
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
