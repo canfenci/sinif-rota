@@ -8,7 +8,7 @@ import { AnnualPlan } from "./components/AnnualPlan";
 import { activeStudentCount, applyBulkStudentAction, classNameExists, createCheckSession, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
 import { seedData } from "./lib/seed";
 import { checkTypes, studentHistorySessions, studentStats } from "./lib/stats";
-import { determineSaveWarning, loadSafe, resolveAppLoadDecision, saveSafe, type AppLoadState } from "./lib/storage";
+import { determineSaveWarning, downloadEmergencyExport, loadSafe, prepareEmergencyExport, resolveAppLoadDecision, saveSafe, type AppLoadState } from "./lib/storage";
 import { createDefaultWorkCalendar, updateAnnualPlanEntry } from "./lib/planning";
 import { createInitialCheckStatuses, updateCheckStatus } from "./lib/quick-check";
 import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./lib/types";
@@ -195,13 +195,30 @@ export default function Home() {
           <p className="safe-state-desc">
             Mevcut kayıtlarınıza dokunulmadı. Sınıf Rota güvenlik amacıyla bu oturumda veri yazmayı durdurdu.
           </p>
-          <button
-            type="button"
-            className="primary-action"
-            onClick={() => window.location.reload()}
-          >
-            Sayfayı yeniden yükle <span>↺</span>
-          </button>
+          <div className="safe-state-actions">
+            <button
+              type="button"
+              className="primary-action"
+              onClick={() => window.location.reload()}
+            >
+              Sayfayı yeniden yükle <span>↺</span>
+            </button>
+            {loadState.raw && (
+              <button
+                type="button"
+                className="secondary-action export-action"
+                onClick={() => {
+                  const descriptor = prepareEmergencyExport({ raw: loadState.raw!, type: "quarantine" });
+                  downloadEmergencyExport(descriptor);
+                }}
+              >
+                Veriyi dışa aktar <span>📥</span>
+              </button>
+            )}
+          </div>
+          {loadState.raw && (
+            <p className="safe-state-subnote">Mevcut kaydın bir kopyasını cihazınıza kaydedebilirsiniz.</p>
+          )}
         </div>
       </main>
     );
@@ -217,13 +234,30 @@ export default function Home() {
           <p className="safe-state-desc">
             Bu sürüm verilerinizi güvenli şekilde açamıyor. Verilerinizi korumak için kayıt işlemleri durduruldu.
           </p>
-          <button
-            type="button"
-            className="primary-action"
-            onClick={() => window.location.reload()}
-          >
-            Sayfayı yeniden yükle <span>↺</span>
-          </button>
+          <div className="safe-state-actions">
+            <button
+              type="button"
+              className="primary-action"
+              onClick={() => window.location.reload()}
+            >
+              Sayfayı yeniden yükle <span>↺</span>
+            </button>
+            {loadState.raw && (
+              <button
+                type="button"
+                className="secondary-action export-action"
+                onClick={() => {
+                  const descriptor = prepareEmergencyExport({ raw: loadState.raw!, type: "backup" });
+                  downloadEmergencyExport(descriptor);
+                }}
+              >
+                Veriyi dışa aktar <span>📥</span>
+              </button>
+            )}
+          </div>
+          {loadState.raw && (
+            <p className="safe-state-subnote">Mevcut kaydın bir kopyasını cihazınıza kaydedebilirsiniz.</p>
+          )}
         </div>
       </main>
     );

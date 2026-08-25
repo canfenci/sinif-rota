@@ -185,3 +185,34 @@ test("N. successful/migrated/empty state remains backward compatible", () => {
     assert.ok(Array.isArray(dec.data.classes));
   }
 });
+
+test("O. quarantined state exposes safe export action", () => {
+  const loadResult = { status: "quarantined", raw: "{ broken", reason: "Malformed JSON", sourceKey: STORAGE_KEY };
+  const decision = resolveAppLoadDecision(loadResult);
+  assert.equal(decision.loadState.status, "quarantined");
+  if (decision.loadState.status === "quarantined") {
+    assert.equal(decision.loadState.raw, "{ broken");
+  }
+});
+
+test("P. export action does not enable editable UI", () => {
+  const loadResult = { status: "quarantined", raw: "{ broken", reason: "Malformed JSON", sourceKey: STORAGE_KEY };
+  const decision = resolveAppLoadDecision(loadResult);
+  assert.equal(decision.writable, false);
+  assert.notEqual(decision.loadState.status, "ready");
+});
+
+test("Q. future_version export does not enable writes", () => {
+  const loadResult = { status: "future_version", schemaVersion: 99, raw: { schemaVersion: 99 }, sourceKey: STORAGE_KEY };
+  const decision = resolveAppLoadDecision(loadResult);
+  assert.equal(decision.writable, false);
+  if (decision.loadState.status === "future_version") {
+    assert.ok(decision.loadState.raw);
+  }
+});
+
+test("R. export does not clear warning/safe state", () => {
+  const loadResult = { status: "quarantined", raw: "{ broken", reason: "Malformed JSON", sourceKey: STORAGE_KEY };
+  const decision = resolveAppLoadDecision(loadResult);
+  assert.equal(decision.loadState.status, "quarantined");
+});

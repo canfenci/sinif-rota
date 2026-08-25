@@ -13,6 +13,7 @@ export interface KeyValueStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  getAllKeys?(): string[];
 }
 
 export type StorageLoadResult =
@@ -20,8 +21,9 @@ export type StorageLoadResult =
   | { status: "migrated"; data: VersionedAppData; backupKey: string; sourceKey: string }
   | { status: "empty"; data: VersionedAppData }
   | { status: "quarantined"; raw: string; quarantineKey?: string; reason: string; sourceKey: string }
-  | { status: "future_version"; schemaVersion: number; raw: unknown; sourceKey: string }
+  | { status: "future_version"; schemaVersion: number; raw: string; sourceKey: string; parsed?: unknown }
   | { status: "storage_unavailable"; reason: string };
+
 
 export type StorageSaveResult =
   | { status: "success" }
@@ -55,7 +57,17 @@ export const browserLocalStorage: KeyValueStorage = {
     if (typeof window === "undefined" || !window.localStorage) return;
     window.localStorage.removeItem(key);
   },
+  getAllKeys(): string[] {
+    if (typeof window === "undefined" || !window.localStorage) return [];
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k !== null) keys.push(k);
+    }
+    return keys;
+  },
 };
+
 
 export function isAppData(value: unknown): value is AppData {
   if (!value || typeof value !== "object") return false;
@@ -123,10 +135,12 @@ export function loadSafe(driver: KeyValueStorage = browserLocalStorage, options?
     return {
       status: "future_version",
       schemaVersion: migration.schemaVersion,
-      raw: migration.raw,
+      raw: rawString,
+      parsed: migration.raw,
       sourceKey,
     };
   }
+
 
   if (migration.status === "invalid_data" || migration.status === "migration_error") {
     const timestamp = nowFn();
@@ -173,6 +187,13 @@ export function loadSafe(driver: KeyValueStorage = browserLocalStorage, options?
             reason: `Failed to write migrated data to active storage: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
             sourceKey,
           };
+        }
+
+        // Rotation hygiene step (keeps newest 3 backups, failure does NOT rollback active migration)
+        try {
+          pruneOldBackups(driver, 3);
+        } catch {
+          // Prune error is non-fatal for migration
         }
 
         return {
@@ -289,11 +310,153 @@ export function createLocalRepository(driver: KeyValueStorage = browserLocalStor
   };
 }
 
+export interface BackupRotationPlan {
+  keep: string[];
+  delete: string[];
+}
+
+export function getBackupRotationPlan(keys: string[], keepCount = 3): BackupRotationPlan {
+  const validBackups: { key: string; timestamp: number }[] = [];
+  const keep: string[] = [];
+
+  for (const key of keys) {
+    if (!key.startsWith(BACKUP_KEY_PREFIX)) {
+      continue;
+    }
+    const suffix = key.slice(BACKUP_KEY_PREFIX.length);
+    const timestamp = Number(suffix);
+
+    if (!Number.isFinite(timestamp) || suffix.trim() === "") {
+      // Unrecognized/malformed backup suffix is preserved safely
+      keep.push(key);
+      continue;
+    }
+
+    validBackups.push({ key, timestamp });
+  }
+
+  // Sort newest first (highest timestamp to lowest)
+  validBackups.sort((a, b) => b.timestamp - a.timestamp);
+
+  const safeKeepCount = Math.max(0, keepCount);
+  const toKeep = validBackups.slice(0, safeKeepCount).map((b) => b.key);
+  const toDelete = validBackups.slice(safeKeepCount).map((b) => b.key);
+
+  return {
+    keep: [...keep, ...toKeep],
+    delete: toDelete,
+  };
+}
+
+export type BackupPruneResult =
+  | { status: "success"; removedKeys: string[]; keptKeys: string[] }
+  | { status: "storage_unavailable"; error: string; removedKeys: string[] }
+  | { status: "error"; error: string; removedKeys: string[] };
+
+export function pruneOldBackups(driver: KeyValueStorage = browserLocalStorage, keepCount = 3): BackupPruneResult {
+  let allKeys: string[] = [];
+  try {
+    if (typeof driver.getAllKeys === "function") {
+      allKeys = driver.getAllKeys();
+    } else if (typeof window !== "undefined" && window.localStorage) {
+      allKeys = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k !== null) allKeys.push(k);
+      }
+    }
+  } catch (err) {
+    return {
+      status: "storage_unavailable",
+      error: err instanceof Error ? err.message : String(err),
+      removedKeys: [],
+    };
+  }
+
+  const plan = getBackupRotationPlan(allKeys, keepCount);
+  const removedKeys: string[] = [];
+
+  for (const keyToDelete of plan.delete) {
+    try {
+      driver.removeItem(keyToDelete);
+      removedKeys.push(keyToDelete);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      const isUnavailable = errorMsg.includes("SecurityError") || errorMsg.includes("access is denied");
+      return {
+        status: isUnavailable ? "storage_unavailable" : "error",
+        error: errorMsg,
+        removedKeys,
+      };
+    }
+  }
+
+  return {
+    status: "success",
+    removedKeys,
+    keptKeys: plan.keep,
+  };
+}
+
+export interface EmergencyExportDescriptor {
+  filename: string;
+  mimeType: string;
+  content: string;
+  isValidJson: boolean;
+}
+
+export function prepareEmergencyExport(options: {
+  raw: string;
+  type: "backup" | "quarantine";
+  timestamp?: number | string;
+}): EmergencyExportDescriptor {
+  const { raw, type, timestamp } = options;
+  let isValidJson = false;
+
+  try {
+    JSON.parse(raw);
+    isValidJson = true;
+  } catch {
+    isValidJson = false;
+  }
+
+  const dateObj = timestamp ? new Date(timestamp) : new Date();
+  const validDate = isNaN(dateObj.getTime()) ? new Date() : dateObj;
+  const dateStr = validDate.toISOString().replace(/[:.]/g, "-");
+
+  const extension = isValidJson ? "json" : "txt";
+  const mimeType = isValidJson ? "application/json" : "text/plain;charset=utf-8";
+  const sanitizedType = type.replace(/[^a-zA-Z0-9_-]/g, "");
+  const filename = `sinif-rota-${sanitizedType}-${dateStr}.${extension}`;
+
+  return {
+    filename,
+    mimeType,
+    content: raw,
+    isValidJson,
+  };
+}
+
+export function downloadEmergencyExport(descriptor: EmergencyExportDescriptor): void {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const blob = new Blob([descriptor.content], { type: descriptor.mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = descriptor.filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
 export type AppLoadState =
   | { status: "loading" }
   | { status: "ready" }
-  | { status: "quarantined"; reason: string; sourceKey?: string }
-  | { status: "future_version"; schemaVersion: number; sourceKey?: string }
+  | { status: "quarantined"; reason: string; sourceKey?: string; raw?: string }
+  | { status: "future_version"; schemaVersion: number; sourceKey?: string; raw?: string }
   | { status: "storage_unavailable"; reason: string };
 
 export interface AppLoadDecision {
@@ -326,16 +489,22 @@ export function resolveAppLoadDecision(result: StorageLoadResult): AppLoadDecisi
       };
     case "quarantined":
       return {
-        loadState: { status: "quarantined", reason: result.reason, sourceKey: result.sourceKey },
+        loadState: { status: "quarantined", reason: result.reason, sourceKey: result.sourceKey, raw: result.raw },
         data: createVersionedSeedData(),
         writable: false,
       };
     case "future_version":
       return {
-        loadState: { status: "future_version", schemaVersion: result.schemaVersion, sourceKey: result.sourceKey },
+        loadState: {
+          status: "future_version",
+          schemaVersion: result.schemaVersion,
+          sourceKey: result.sourceKey,
+          raw: result.raw,
+        },
         data: createVersionedSeedData(),
         writable: false,
       };
+
     case "storage_unavailable":
       return {
         loadState: { status: "storage_unavailable", reason: result.reason },
