@@ -48,6 +48,20 @@ async function importTypeScript(path) {
     grade6Output = grade6Output.replace('from "./allocation"', `from "${allocationUrl}"`);
     const grade6Url = `data:text/javascript;base64,${Buffer.from(grade6Output).toString("base64")}`;
     output = output.replace('from "./planning/grade6"', `from "${grade6Url}"`);
+
+    const grade7Source = await readFile(new URL("../app/lib/planning/grade7.ts", import.meta.url), "utf8");
+    let grade7Output = ts.transpileModule(grade7Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    grade7Output = grade7Output.replace('from "./calendar"', `from "${calendarUrl}"`);
+    grade7Output = grade7Output.replace('from "./allocation"', `from "${allocationUrl}"`);
+    const grade7Url = `data:text/javascript;base64,${Buffer.from(grade7Output).toString("base64")}`;
+    output = output.replace('from "./planning/grade7"', `from "${grade7Url}"`);
+
+    const grade8Source = await readFile(new URL("../app/lib/planning/grade8.ts", import.meta.url), "utf8");
+    let grade8Output = ts.transpileModule(grade8Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+    grade8Output = grade8Output.replace('from "./calendar"', `from "${calendarUrl}"`);
+    grade8Output = grade8Output.replace('from "./allocation"', `from "${allocationUrl}"`);
+    const grade8Url = `data:text/javascript;base64,${Buffer.from(grade8Output).toString("base64")}`;
+    output = output.replace('from "./planning/grade8"', `from "${grade8Url}"`);
   }
   return import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
 }
