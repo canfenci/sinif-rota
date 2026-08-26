@@ -1,5 +1,10 @@
 import type { AppData, CheckSession, CheckStatus, CheckType, SchoolClass } from "./types";
 
+export const emptyAppData: AppData = {
+  classes: [],
+  sessions: [],
+};
+
 const firstNames = ["Ahmet","Ayşe","Mehmet","Zeynep","Emir","Elif","Arda","Ece","Kerem","Defne","Mert","Selin","Can","Duru","Eren","İrem","Berk","Nisa","Kaan","Sude","Deniz","Ceren","Ali","Naz","Yiğit","Ada","Ömer","Yağmur","Burak","Melis","Umut","İlayda","Ozan","Eylül","Baran","Mina","Doruk","Aslı","Onur","Lara","Tuna","Pelin"];
 const lastNames = ["Demir","Yılmaz","Kaya","Çelik","Şahin","Aydın","Öztürk","Arslan","Koç","Kurt","Aksoy","Polat","Güneş","Yıldız"];
 const classNames = ["5-A", "5-B", "5-C", "5-D", "5-E"];
@@ -34,4 +39,5 @@ const sessions: CheckSession[] = Array.from({ length: 12 }, (_, sessionIndex) =>
   };
 });
 
-export const seedData: AppData = { classes: seedClasses, sessions };
+export const demoSeedData: AppData = { classes: seedClasses, sessions };
+export const seedData: AppData = emptyAppData;

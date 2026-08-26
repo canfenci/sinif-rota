@@ -45,7 +45,7 @@ const {
   QUARANTINE_KEY_PREFIX,
   loadSafe,
   saveSafe,
-  createVersionedSeedData,
+  createVersionedEmptyData,
   createLocalRepository,
   isAppData,
 } = await importTypeScript("app/lib/storage.ts");
@@ -380,10 +380,11 @@ test("W. isAppData correctly validates v0 and v1 app data", () => {
   assert.equal(isAppData({ classes: "invalid" }), false);
 });
 
-test("X. createVersionedSeedData returns seed data with CURRENT_SCHEMA_VERSION", () => {
-  const seed = createVersionedSeedData();
-  assert.equal(seed.schemaVersion, CURRENT_SCHEMA_VERSION);
-  assert.ok(seed.classes.length > 0);
+test("X. createVersionedEmptyData returns empty data with CURRENT_SCHEMA_VERSION", () => {
+  const emptyData = createVersionedEmptyData();
+  assert.equal(emptyData.schemaVersion, CURRENT_SCHEMA_VERSION);
+  assert.equal(emptyData.classes.length, 0);
+  assert.equal(emptyData.sessions.length, 0);
 });
 
 test("Y. quarantined localRepository load activates write-lock", () => {

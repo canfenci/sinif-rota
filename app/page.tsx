@@ -6,7 +6,7 @@ import { StatusSelector } from "./components/StatusSelector";
 import { StudentImport } from "./components/StudentImport";
 import { AnnualPlan } from "./components/AnnualPlan";
 import { activeStudentCount, applyBulkStudentAction, classNameExists, createCheckSession, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
-import { seedData } from "./lib/seed";
+import { emptyAppData } from "./lib/seed";
 import { checkTypes, studentHistorySessions, studentStats } from "./lib/stats";
 import { STORAGE_KEY, browserLocalStorage, createBrowserLockCoordinator, createCoordinatedSaveQueue, determineSaveWarning, downloadEmergencyExport, loadCoordinated, prepareEmergencyExport, type AppLoadState, type CoordinatedSaveQueue } from "./lib/storage";
 import { getCalendarSupportState, resolveDefaultWorkCalendar } from "./lib/academic-year";
@@ -23,11 +23,11 @@ type WriteBlock = "conflict" | "coordination_unavailable";
 
 export default function Home() {
   const [loadState, setLoadState] = useState<AppLoadState>({ status: "loading" });
-  const [data, setData] = useState<AppData>(seedData);
+  const [data, setData] = useState<AppData>(emptyAppData);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [writeBlock, setWriteBlock] = useState<WriteBlock | null>(null);
   const [view, setView] = useState<View>("home");
-  const [classId, setClassId] = useState(seedData.classes[0].id);
+  const [classId, setClassId] = useState(emptyAppData.classes[0]?.id ?? "");
   const [studentId, setStudentId] = useState("");
   const [checkType, setCheckType] = useState<CheckType>("Ödev");
   const [statuses, setStatuses] = useState<Record<string, CheckStatus> | null>(null);

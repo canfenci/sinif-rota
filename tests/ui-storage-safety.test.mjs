@@ -45,6 +45,7 @@ const {
   loadSafe,
   saveSafe,
   createVersionedSeedData,
+  createVersionedEmptyData,
 } = await importTypeScript("app/lib/storage.ts");
 
 function createMockStorage(initial = {}) {
@@ -59,7 +60,7 @@ function createMockStorage(initial = {}) {
 
 const validV1Data = {
   schemaVersion: 1,
-  classes: [{ id: "c1", name: "5-A", students: [{ id: "s1", name: "Ali", number: 1, active: true }], archived: false }],
+  classes: [{ id: "c1", name: "5-A", students: [{ id: "s1", name: "Ali", number: 1 }] }],
   sessions: [],
 };
 
@@ -69,24 +70,27 @@ test("A. success -> editable ready state", () => {
   assert.equal(decision.loadState.status, "ready");
   assert.equal(decision.writable, true);
   assert.deepEqual(decision.data, validV1Data);
+  assert.equal(decision.migrationNotice, undefined);
 });
 
 test("B. migrated -> editable ready state with user-friendly notice", () => {
-  const loadResult = { status: "migrated", data: validV1Data, backupKey: "backup-123", sourceKey: STORAGE_KEY };
+  const loadResult = { status: "migrated", data: validV1Data, sourceKey: STORAGE_KEY, backupKey: "backup-1" };
   const decision = resolveAppLoadDecision(loadResult);
   assert.equal(decision.loadState.status, "ready");
   assert.equal(decision.writable, true);
+  assert.deepEqual(decision.data, validV1Data);
   assert.ok(decision.migrationNotice);
   assert.match(decision.migrationNotice, /güvenli şekilde güncellendi/);
   assert.doesNotMatch(decision.migrationNotice, /schemaVersion/);
 });
 
 test("C. empty -> editable ready state", () => {
-  const loadResult = { status: "empty", data: createVersionedSeedData() };
+  const loadResult = { status: "empty", data: createVersionedEmptyData() };
   const decision = resolveAppLoadDecision(loadResult);
   assert.equal(decision.loadState.status, "ready");
   assert.equal(decision.writable, true);
-  assert.ok(decision.data.classes.length > 0);
+  assert.equal(decision.data.classes.length, 0);
+  assert.equal(decision.data.sessions.length, 0);
 });
 
 test("D. quarantined -> non-editable safe state", () => {

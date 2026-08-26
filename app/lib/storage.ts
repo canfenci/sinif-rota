@@ -1,5 +1,5 @@
 import { CURRENT_SCHEMA_VERSION, detectSchemaVersion, migrateData } from "./migrations";
-import { seedData } from "./seed";
+import { emptyAppData } from "./seed";
 import type { AppData, VersionedAppData } from "./types";
 
 export const STORAGE_KEY = "sinif-rota-prototype-v1";
@@ -53,11 +53,15 @@ export interface StorageOptions {
   now?: () => number;
 }
 
-export function createVersionedSeedData(): VersionedAppData {
+export function createVersionedEmptyData(): VersionedAppData {
   return {
-    ...seedData,
+    ...emptyAppData,
     schemaVersion: CURRENT_SCHEMA_VERSION,
   };
+}
+
+export function createVersionedSeedData(): VersionedAppData {
+  return createVersionedEmptyData();
 }
 
 export const browserLocalStorage: KeyValueStorage = {
@@ -121,7 +125,7 @@ export function loadSafe(driver: KeyValueStorage = browserLocalStorage, options?
   } else {
     return {
       status: "empty",
-      data: createVersionedSeedData(),
+      data: createVersionedEmptyData(),
     };
   }
 
@@ -315,7 +319,7 @@ export function createBrowserLockCoordinator(): ExclusiveLockCoordinator | null 
 function coordinationUnavailableDecision(reason: string): AppLoadDecision {
   return {
     loadState: { status: "coordination_unavailable", reason },
-    data: createVersionedSeedData(),
+    data: createVersionedEmptyData(),
     writable: false,
   };
 }
@@ -347,7 +351,7 @@ export async function loadCoordinated(
               status: "storage_unavailable",
               reason: error instanceof Error ? error.message : String(error),
             },
-            data: createVersionedSeedData(),
+            data: createVersionedEmptyData(),
             writable: false,
           },
           token: null,
@@ -449,14 +453,14 @@ export function createLocalRepository(driver: KeyValueStorage = browserLocalStor
   let isWriteLocked = false;
   return {
     load(): AppData {
-      if (typeof window === "undefined" && driver === browserLocalStorage) return seedData;
+      if (typeof window === "undefined" && driver === browserLocalStorage) return emptyAppData;
       const result = loadSafe(driver);
       if (result.status === "success" || result.status === "migrated" || result.status === "empty") {
         isWriteLocked = false;
         return result.data;
       }
       isWriteLocked = true;
-      return createVersionedSeedData();
+      return createVersionedEmptyData();
     },
     save(data: AppData): void {
       if (isWriteLocked) return;
@@ -656,7 +660,7 @@ export function resolveAppLoadDecision(result: StorageLoadResult): AppLoadDecisi
     case "quarantined":
       return {
         loadState: { status: "quarantined", reason: result.reason, sourceKey: result.sourceKey, raw: result.raw },
-        data: createVersionedSeedData(),
+        data: createVersionedEmptyData(),
         writable: false,
       };
     case "future_version":
@@ -667,14 +671,14 @@ export function resolveAppLoadDecision(result: StorageLoadResult): AppLoadDecisi
           sourceKey: result.sourceKey,
           raw: result.raw,
         },
-        data: createVersionedSeedData(),
+        data: createVersionedEmptyData(),
         writable: false,
       };
 
     case "storage_unavailable":
       return {
         loadState: { status: "storage_unavailable", reason: result.reason },
-        data: createVersionedSeedData(),
+        data: createVersionedEmptyData(),
         writable: false,
       };
   }
