@@ -75,3 +75,61 @@ test("F. No arbitrary device-specific hardcoded notch pixel constants are introd
   assert.ok(!css.includes("54px +"), "Must not contain hardcoded 54px notch height");
   assert.ok(!css.includes("59px +"), "Must not contain hardcoded 59px notch height");
 });
+
+test("G. Mobile .page-header uses sticky positioning", () => {
+  const cssPath = path.resolve("app/globals.css");
+  const css = fs.readFileSync(cssPath, "utf8");
+
+  assert.ok(
+    css.includes(".page-header{position:sticky;top:0;z-index:10"),
+    "Mobile .page-header must be sticky at top:0 with z-index:10",
+  );
+});
+
+test("H. Mobile .page-header incorporates env(safe-area-inset-top) into margin and padding", () => {
+  const cssPath = path.resolve("app/globals.css");
+  const css = fs.readFileSync(cssPath, "utf8");
+
+  assert.ok(
+    css.includes("margin-top:calc(-24px - env(safe-area-inset-top));margin-left:-20px;margin-right:-20px;padding-top:calc(24px + env(safe-area-inset-top));padding-left:20px;padding-right:20px;background:var(--paper)"),
+    "Mobile .page-header must adapt margin-top and padding-top to env(safe-area-inset-top) with var(--paper) background",
+  );
+  assert.ok(
+    css.includes("@media(max-width:380px){.page-header{margin-left:-14px;margin-right:-14px;padding-left:14px;padding-right:14px}"),
+    "Mobile .page-header must support <=380px narrow horizontal margins and paddings",
+  );
+});
+
+test("I. Desktop >=700px does not unintentionally inherit mobile sticky behavior", () => {
+  const cssPath = path.resolve("app/globals.css");
+  const css = fs.readFileSync(cssPath, "utf8");
+
+  assert.ok(
+    css.includes("@media(min-width:700px){.page-header{position:static;margin:0;padding:0;background:transparent}"),
+    "Desktop .page-header must remain static with transparent background on >=700px",
+  );
+});
+
+test("J. Existing .quick-top safe-area behavior remains unchanged", () => {
+  const cssPath = path.resolve("app/globals.css");
+  const css = fs.readFileSync(cssPath, "utf8");
+
+  assert.ok(
+    css.includes(".quick-top{margin-top:calc(-24px - env(safe-area-inset-top));padding-top:calc(18px + env(safe-area-inset-top))}"),
+    "Mobile .quick-top must remain unchanged",
+  );
+  assert.ok(
+    css.includes(".quick-top{margin-top:calc(-36px - env(safe-area-inset-top));padding-top:calc(22px + env(safe-area-inset-top))}"),
+    "Desktop .quick-top must remain unchanged",
+  );
+});
+
+test("K. Existing bottom safe-area protections remain unchanged", () => {
+  const cssPath = path.resolve("app/globals.css");
+  const css = fs.readFileSync(cssPath, "utf8");
+
+  assert.ok(css.includes(".bottom-nav{height:calc(68px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom)}"));
+  assert.ok(css.includes(".save-dock{padding-bottom:calc(10px + env(safe-area-inset-bottom))}"));
+  assert.ok(css.includes(".bulk-dock{bottom:calc(68px + env(safe-area-inset-bottom))}"));
+  assert.ok(css.includes(".toast{bottom:calc(86px + env(safe-area-inset-bottom))}"));
+});
