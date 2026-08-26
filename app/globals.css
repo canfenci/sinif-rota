@@ -47,8 +47,12 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .safe-state-desc{max-width:460px;margin:0 0 28px;color:var(--muted);font-size:14px;line-height:1.55}
 .safe-state-container .primary-action{max-width:280px;justify-content:center;gap:10px}
 .save-warning-banner{position:sticky;top:0;z-index:30;margin:-24px -20px 16px;padding:12px 18px;background:#fdf3d8;border-bottom:1px solid #eed69b;color:#7e4c00;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.concurrency-warning{justify-content:space-between;align-items:center}
+.concurrency-warning span{max-width:620px;line-height:1.45}
+.concurrency-warning button{flex:0 0 auto;min-height:44px;padding:0 12px;border:1px solid currentColor;border-radius:5px;background:transparent;color:inherit;font-weight:700;cursor:pointer}
 @media(max-width:380px){.save-warning-banner{margin-left:-14px;margin-right:-14px;padding:10px 14px;font-size:12px}}
 @media(min-width:700px){.save-warning-banner{margin-top:-36px;margin-left:-36px;margin-right:-36px;padding:14px 28px}}
+@media(max-width:520px){.concurrency-warning{align-items:stretch;flex-direction:column}.concurrency-warning button{width:100%}}
 .safe-state-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px}
 .safe-state-subnote{margin:16px 0 0;color:var(--muted);font-size:12px;line-height:1.4;max-width:420px}
 .export-action{width:100%;min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px}

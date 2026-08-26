@@ -6,6 +6,7 @@ export const STORAGE_KEY = "sinif-rota-prototype-v1";
 export const LEGACY_STORAGE_KEY = "okul-takip-prototype-v1";
 export const BACKUP_KEY_PREFIX = "sinif-rota-backup-pre-migration-";
 export const QUARANTINE_KEY_PREFIX = "sinif-rota-corrupted-raw-";
+export const APP_DATA_LOCK_NAME = "sinif-rota-appdata-write";
 
 // Persisted fields: classes, sessions, workCalendar, annualPlanEntries, unknown fields
 
@@ -30,6 +31,23 @@ export type StorageSaveResult =
   | { status: "quota_exceeded"; error: string }
   | { status: "storage_unavailable"; error: string }
   | { status: "error"; error: string };
+
+export type StorageToken = string | null;
+
+export interface ExclusiveLockCoordinator {
+  runExclusive<T>(operation: () => Promise<T> | T): Promise<T>;
+}
+
+export type CoordinatedSaveResult =
+  | { status: "success"; nextToken: string }
+  | { status: "conflict"; currentToken: StorageToken }
+  | { status: "coordination_unavailable"; error: string }
+  | Exclude<StorageSaveResult, { status: "success" }>;
+
+export interface CoordinatedLoadResult {
+  decision: AppLoadDecision;
+  token: StorageToken;
+}
 
 export interface StorageOptions {
   now?: () => number;
@@ -239,13 +257,17 @@ export function isQuotaExceededError(error: unknown): boolean {
   return false;
 }
 
-export function saveSafe(data: AppData, driver: KeyValueStorage = browserLocalStorage): StorageSaveResult {
+function serializeAppData(data: AppData): string {
+  const versioned: VersionedAppData = {
+    ...data,
+    schemaVersion: data.schemaVersion ?? CURRENT_SCHEMA_VERSION,
+  };
+  return JSON.stringify(versioned);
+}
+
+function writeSerializedData(raw: string, driver: KeyValueStorage): StorageSaveResult {
   try {
-    const versioned: VersionedAppData = {
-      ...data,
-      schemaVersion: data.schemaVersion ?? CURRENT_SCHEMA_VERSION,
-    };
-    driver.setItem(STORAGE_KEY, JSON.stringify(versioned));
+    driver.setItem(STORAGE_KEY, raw);
     return { status: "success" };
   } catch (error) {
     if (isQuotaExceededError(error)) {
@@ -270,6 +292,149 @@ export function saveSafe(data: AppData, driver: KeyValueStorage = browserLocalSt
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+export function saveSafe(data: AppData, driver: KeyValueStorage = browserLocalStorage): StorageSaveResult {
+  return writeSerializedData(serializeAppData(data), driver);
+}
+
+export function createBrowserLockCoordinator(): ExclusiveLockCoordinator | null {
+  if (typeof navigator === "undefined" || !navigator.locks) return null;
+  return {
+    runExclusive<T>(operation: () => Promise<T> | T): Promise<T> {
+      const pending = navigator.locks.request<Promise<T>>(
+        APP_DATA_LOCK_NAME,
+        { mode: "exclusive" },
+        () => Promise.resolve(operation()),
+      );
+      return pending.then((result) => result);
+    },
+  };
+}
+
+function coordinationUnavailableDecision(reason: string): AppLoadDecision {
+  return {
+    loadState: { status: "coordination_unavailable", reason },
+    data: createVersionedSeedData(),
+    writable: false,
+  };
+}
+
+export async function loadCoordinated(
+  driver: KeyValueStorage = browserLocalStorage,
+  coordinator: ExclusiveLockCoordinator | null = createBrowserLockCoordinator(),
+  options?: StorageOptions,
+): Promise<CoordinatedLoadResult> {
+  if (!coordinator) {
+    return {
+      decision: coordinationUnavailableDecision("Güvenli sekme koordinasyonu bu tarayıcıda kullanılamıyor."),
+      token: null,
+    };
+  }
+
+  try {
+    return await coordinator.runExclusive(() => {
+      const result = loadSafe(driver, options);
+      const decision = resolveAppLoadDecision(result);
+      if (!decision.writable) return { decision, token: null };
+
+      try {
+        return { decision, token: driver.getItem(STORAGE_KEY) };
+      } catch (error) {
+        return {
+          decision: {
+            loadState: {
+              status: "storage_unavailable",
+              reason: error instanceof Error ? error.message : String(error),
+            },
+            data: createVersionedSeedData(),
+            writable: false,
+          },
+          token: null,
+        };
+      }
+    });
+  } catch (error) {
+    return {
+      decision: coordinationUnavailableDecision(error instanceof Error ? error.message : String(error)),
+      token: null,
+    };
+  }
+}
+
+export async function saveCoordinated(
+  data: AppData,
+  expectedToken: StorageToken,
+  driver: KeyValueStorage = browserLocalStorage,
+  coordinator: ExclusiveLockCoordinator | null = createBrowserLockCoordinator(),
+): Promise<CoordinatedSaveResult> {
+  if (!coordinator) {
+    return { status: "coordination_unavailable", error: "Güvenli sekme koordinasyonu bu tarayıcıda kullanılamıyor." };
+  }
+
+  try {
+    return await coordinator.runExclusive(() => {
+      let currentToken: StorageToken;
+      try {
+        currentToken = driver.getItem(STORAGE_KEY);
+      } catch (error) {
+        return {
+          status: "storage_unavailable" as const,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+
+      if (currentToken !== expectedToken) {
+        return { status: "conflict" as const, currentToken };
+      }
+
+      const nextToken = serializeAppData(data);
+      const result = writeSerializedData(nextToken, driver);
+      return result.status === "success" ? { status: "success" as const, nextToken } : result;
+    });
+  } catch (error) {
+    return { status: "coordination_unavailable", error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export interface CoordinatedSaveQueue {
+  enqueue(data: AppData): Promise<CoordinatedSaveResult>;
+  block(): void;
+  isBlocked(): boolean;
+  getExpectedToken(): StorageToken;
+}
+
+export function createCoordinatedSaveQueue(
+  initialToken: StorageToken,
+  driver: KeyValueStorage = browserLocalStorage,
+  coordinator: ExclusiveLockCoordinator | null = createBrowserLockCoordinator(),
+): CoordinatedSaveQueue {
+  let expectedToken = initialToken;
+  let blocked = false;
+  let tail: Promise<void> = Promise.resolve();
+
+  return {
+    enqueue(data: AppData): Promise<CoordinatedSaveResult> {
+      const pending = tail.then(async () => {
+        if (blocked) return { status: "conflict" as const, currentToken: expectedToken };
+        const result = await saveCoordinated(data, expectedToken, driver, coordinator);
+        if (result.status === "success") expectedToken = result.nextToken;
+        if (result.status === "conflict" || result.status === "coordination_unavailable") blocked = true;
+        return result;
+      });
+      tail = pending.then(() => undefined, () => undefined);
+      return pending;
+    },
+    block(): void {
+      blocked = true;
+    },
+    isBlocked(): boolean {
+      return blocked;
+    },
+    getExpectedToken(): StorageToken {
+      return expectedToken;
+    },
+  };
 }
 
 export interface DataRepository {
@@ -457,7 +622,8 @@ export type AppLoadState =
   | { status: "ready" }
   | { status: "quarantined"; reason: string; sourceKey?: string; raw?: string }
   | { status: "future_version"; schemaVersion: number; sourceKey?: string; raw?: string }
-  | { status: "storage_unavailable"; reason: string };
+  | { status: "storage_unavailable"; reason: string }
+  | { status: "coordination_unavailable"; reason: string };
 
 export interface AppLoadDecision {
   loadState: AppLoadState;

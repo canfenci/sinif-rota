@@ -8,7 +8,7 @@ import { AnnualPlan } from "./components/AnnualPlan";
 import { activeStudentCount, applyBulkStudentAction, classNameExists, createCheckSession, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
 import { seedData } from "./lib/seed";
 import { checkTypes, studentHistorySessions, studentStats } from "./lib/stats";
-import { determineSaveWarning, downloadEmergencyExport, loadSafe, prepareEmergencyExport, resolveAppLoadDecision, saveSafe, type AppLoadState } from "./lib/storage";
+import { STORAGE_KEY, browserLocalStorage, createBrowserLockCoordinator, createCoordinatedSaveQueue, determineSaveWarning, downloadEmergencyExport, loadCoordinated, prepareEmergencyExport, type AppLoadState, type CoordinatedSaveQueue } from "./lib/storage";
 import { getCalendarSupportState, resolveDefaultWorkCalendar } from "./lib/academic-year";
 import { updateAnnualPlanEntry } from "./lib/planning";
 import { BUILD_INFO } from "./lib/build-info";
@@ -18,11 +18,13 @@ import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./li
 type View = "home" | "classes" | "class" | "quick" | "student" | "import" | "plan";
 type EditTarget = { kind: "class"; item?: SchoolClass } | { kind: "student"; item?: Student };
 type BulkRequest = { action: BulkStudentAction; studentIds: string[] };
+type WriteBlock = "conflict" | "coordination_unavailable";
 
 export default function Home() {
   const [loadState, setLoadState] = useState<AppLoadState>({ status: "loading" });
   const [data, setData] = useState<AppData>(seedData);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [writeBlock, setWriteBlock] = useState<WriteBlock | null>(null);
   const [view, setView] = useState<View>("home");
   const [classId, setClassId] = useState(seedData.classes[0].id);
   const [studentId, setStudentId] = useState("");
@@ -37,29 +39,67 @@ export default function Home() {
   const [bulkRequest, setBulkRequest] = useState<BulkRequest | null>(null);
   const [bulkVersion, setBulkVersion] = useState(0);
   const toastTimer = useRef<number | null>(null);
+  const saveQueue = useRef<CoordinatedSaveQueue | null>(null);
+  const skipHydrationSave = useRef(false);
 
   useEffect(() => {
     console.info(`[Sınıf Rota] ${BUILD_INFO.display} (v${BUILD_INFO.version}) aktif.`);
-    const frame = window.requestAnimationFrame(() => {
-      const result = loadSafe();
-      const decision = resolveAppLoadDecision(result);
+    let cancelled = false;
+    const coordinator = createBrowserLockCoordinator();
+    const frame = window.requestAnimationFrame(async () => {
+      const { decision, token } = await loadCoordinated(browserLocalStorage, coordinator);
+      if (cancelled) return;
+      if (decision.writable) {
+        saveQueue.current = createCoordinatedSaveQueue(token, browserLocalStorage, coordinator);
+        skipHydrationSave.current = true;
+      }
       setData(decision.data);
       setLoadState(decision.loadState);
       if (decision.migrationNotice) {
         showToast(decision.migrationNotice);
       }
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   useEffect(() => {
     if (loadState.status !== "ready") return;
-    const saveResult = saveSafe(data);
-    const warning = determineSaveWarning(saveResult);
-    queueMicrotask(() => {
-      setSaveWarning(warning);
+    if (skipHydrationSave.current) {
+      skipHydrationSave.current = false;
+      return;
+    }
+    if (writeBlock || !saveQueue.current) return;
+
+    let cancelled = false;
+    void saveQueue.current.enqueue(data).then((saveResult) => {
+      if (cancelled) return;
+      if (saveResult.status === "conflict" || saveResult.status === "coordination_unavailable") {
+        setWriteBlock(saveResult.status);
+        setSaveWarning(null);
+        return;
+      }
+      setSaveWarning(determineSaveWarning(saveResult));
     });
-  }, [data, loadState.status]);
+    return () => {
+      cancelled = true;
+    };
+  }, [data, loadState.status, writeBlock]);
+
+  useEffect(() => {
+    if (loadState.status !== "ready") return;
+    function handleStorageChange(event: StorageEvent) {
+      const queue = saveQueue.current;
+      if (event.key !== STORAGE_KEY || !queue || event.newValue === queue.getExpectedToken()) return;
+      queue.block();
+      setWriteBlock("conflict");
+      setSaveWarning(null);
+    }
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [loadState.status]);
 
   const schoolClass = data.classes.find((item) => item.id === classId) ?? data.classes[0];
   const activeClasses = data.classes.filter((item) => !item.archived);
@@ -291,8 +331,32 @@ export default function Home() {
     );
   }
 
+  if (loadState.status === "coordination_unavailable") {
+    return (
+      <main className="app-shell">
+        <div className="safe-state-container" role="alert">
+          <div className="safe-state-icon" aria-hidden="true">🔒</div>
+          <p className="kicker">GÜVENLİ KAYIT KORUMASI</p>
+          <h1>Bu tarayıcıda güvenli sekme koordinasyonu kullanılamıyor.</h1>
+          <p className="safe-state-desc">
+            Verilerinizin başka bir sekme tarafından yanlışlıkla ezilmesini önlemek için kayıt işlemleri durduruldu.
+          </p>
+          <button type="button" className="primary-action" onClick={() => window.location.reload()}>
+            Sayfayı yeniden yükle <span>↺</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   return <main className={`app-shell ${view === "quick" && statuses ? "quick-open" : ""}`}>
-    {saveWarning && (
+    {writeBlock && (
+      <div className="save-warning-banner concurrency-warning" role="alert">
+        <span>{writeBlock === "conflict" ? "Veriler başka bir sekmede değiştirildi. Bu sekmedeki son değişiklik kaydedilmedi. Güncel verileri almak için sayfayı yenileyin." : "Güvenli sekme koordinasyonu kullanılamadığı için bu sekmede kayıt durduruldu."}</span>
+        <button type="button" onClick={() => window.location.reload()}>Sayfayı yenile</button>
+      </div>
+    )}
+    {!writeBlock && saveWarning && (
       <div className="save-warning-banner" role="alert">
         <span>⚠️ {saveWarning}</span>
       </div>
