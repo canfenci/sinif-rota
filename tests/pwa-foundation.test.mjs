@@ -41,7 +41,9 @@ test("C. Service Worker file exists and contains valid JS with expected caching 
   assert.ok(fs.existsSync(swPath), "public/sw.js must exist");
   
   const swCode = fs.readFileSync(swPath, "utf8");
-  assert.ok(swCode.includes("sinif-rota-v1"), "Must contain versioned cache name");
+  assert.ok(swCode.includes('const BUILD_ID = "development"; // PWA_BUILD_ID'), "Must contain build-ID finalization marker");
+  assert.ok(swCode.includes('const CACHE_NAME = `sinif-rota-${BUILD_ID}`; // PWA_CACHE_NAME'), "Must derive the template cache name from build ID");
+  assert.ok(swCode.includes("PWA_CORE_PRECACHE_START"), "Must contain deterministic precache finalization markers");
   assert.ok(swCode.includes("addEventListener(\"install\""), "Must have install listener");
   assert.ok(swCode.includes("addEventListener(\"activate\""), "Must have activate listener");
   assert.ok(swCode.includes("addEventListener(\"fetch\""), "Must have fetch listener");
@@ -60,7 +62,8 @@ test("D. BUILD_INFO and vite.config.ts have no hardcoded historical commit fallb
 
   const viteConfigPath = path.resolve("vite.config.ts");
   const viteConfigContent = fs.readFileSync(viteConfigPath, "utf8");
+  const buildIdContent = fs.readFileSync(path.resolve("scripts/build-id.mjs"), "utf8");
   assert.ok(!viteConfigContent.includes("7de495e"), "vite.config.ts must not contain hardcoded 7de495e");
-  assert.ok(viteConfigContent.includes('"unknown"'), "vite.config.ts must contain unknown fallback");
+  assert.ok(viteConfigContent.includes("resolveBuildId"), "vite.config.ts must use the shared build-ID resolver");
+  assert.ok(buildIdContent.includes('"unknown"'), "shared build-ID resolver must contain unknown fallback");
 });
-

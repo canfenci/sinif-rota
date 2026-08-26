@@ -1,22 +1,8 @@
-import { execSync } from "node:child_process";
 import { sites } from "@openai/sites-vite-plugin";
 import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
-
-function getGitCommitHash(): string {
-  if (process.env.NEXT_PUBLIC_COMMIT_HASH) {
-    return process.env.NEXT_PUBLIC_COMMIT_HASH.slice(0, 7);
-  }
-  if (process.env.CF_PAGES_COMMIT_SHA) {
-    return process.env.CF_PAGES_COMMIT_SHA.slice(0, 7);
-  }
-  try {
-    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8" }).trim();
-  } catch {
-    return "unknown";
-  }
-}
+import { resolveBuildId } from "./scripts/build-id.mjs";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
@@ -49,6 +35,7 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
+  const buildId = resolveBuildId();
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
@@ -60,7 +47,7 @@ export default defineConfig(async () => {
 
   return {
     define: {
-      __COMMIT_HASH__: JSON.stringify(getGitCommitHash()),
+      __COMMIT_HASH__: JSON.stringify(buildId),
     },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }

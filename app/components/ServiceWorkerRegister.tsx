@@ -39,23 +39,31 @@ function sendWarmCacheMessage(worker: ServiceWorker | null | undefined) {
 
 export function ServiceWorkerRegister() {
   useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator) || process.env.NODE_ENV === "test") {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") {
       return;
     }
 
+    let disposed = false;
+    let controllerListenerAttached = false;
+
+    const handleControllerChange = () => {
+      sendWarmCacheMessage(navigator.serviceWorker.controller);
+    };
+
     const handleLoad = () => {
       navigator.serviceWorker
-        .register("/sw.js")
+        .register("/sw.js", { updateViaCache: "none" })
         .then((registration) => {
+          if (disposed) return;
+
           // If already controlling, warm cache with initial page assets
           if (navigator.serviceWorker.controller) {
             sendWarmCacheMessage(navigator.serviceWorker.controller);
           }
 
           // When a new worker takes control, warm cache
-          navigator.serviceWorker.addEventListener("controllerchange", () => {
-            sendWarmCacheMessage(navigator.serviceWorker.controller);
-          });
+          navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+          controllerListenerAttached = true;
 
           registration.onupdatefound = () => {
             const installingWorker = registration.installing;
@@ -74,7 +82,13 @@ export function ServiceWorkerRegister() {
     };
 
     window.addEventListener("load", handleLoad);
-    return () => window.removeEventListener("load", handleLoad);
+    return () => {
+      disposed = true;
+      window.removeEventListener("load", handleLoad);
+      if (controllerListenerAttached) {
+        navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+      }
+    };
   }, []);
 
   return null;
