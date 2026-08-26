@@ -182,10 +182,10 @@ test("Q. unknown lookup returns null", () => {
   assert.equal(officialCurriculumRegistry.get("FB.6.99.99.99"), null);
 });
 
-test("R. registry builds without duplicate exception (Grade 5 + Grade 6 = 64)", () => {
+test("R. registry builds without duplicate exception (Grade 6 = 36, Total = 161)", () => {
   const reg = createCurriculumRegistry([...grade6CurriculumMetadata]);
   assert.equal(reg.size, 36);
-  assert.equal(officialCurriculumRegistry.size, 28 + 36);
+  assert.equal(officialCurriculumRegistry.size, 28 + 36 + 36 + 61);
 });
 
 test("S. officialHours all null if no outcome-specific hours", () => {

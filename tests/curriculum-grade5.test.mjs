@@ -227,3 +227,11 @@ test("V. dataset does not mutate planning allocation", () => {
   assert.ok(metadata);
   assert.equal(planningAllocation.allocatedHours, 4);
 });
+
+test("W. FB.5.2.3.2 process components are clean and free of paragraph paste artifacts", () => {
+  const item = officialCurriculumRegistry.get("FB.5.2.3.2");
+  assert.ok(item);
+  assert.equal(item.processComponents.length, 2);
+  assert.equal(item.processComponents[0], "a) Sürtünmeyi artıran ve azaltan durumları gözlemlemek için model önerir.");
+  assert.equal(item.processComponents[1], "b) Sürtünmeyi artıran ve azaltan durumlara ilişkin gözlemleri sonucunda modelini geliştirir.");
+});

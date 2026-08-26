@@ -160,7 +160,7 @@ export const grade5CurriculumMetadata: readonly CurriculumOutcomeMetadata[] = [
     "officialHours": null,
     "processComponents": [
       "a) Sürtünmeyi artıran ve azaltan durumları gözlemlemek için model önerir.",
-      "b) Sürtünmeyi artıran ve azaltan durumlara ilişkin gözlemleri sonucunda modelini geliştirir. Kuvvet ve Kuvvetin Ölçülmesi Kütle ve Ağırlık İlişkisi Sürtünme Kuvveti kuvvet, kuvvet birimi, dinamometre, kütle, ağırlık, sürtünme kuvveti, su direnci, hava direnci Öğrenme çıktılarının değerlendirilmesinde çalışma kâğıdı, kavram/zihin haritası, balık kılçığı, tanılayıcı dallanmış ağaç, yapılandırılmış grid ve performans görevi kullanılabilir. Ayrıca ünite sürecinde ortaya çıkan öğrenci ürünleri değerlendirme amaçlı kullanılabilir. Öğrencilerin dinamometre ile ölçüm yaparak kazandıkları deneyime bağlı olarak basit araç gereçlerle tasarladıkları dinamometre modeli ile kuvveti ölçmeye yönelik performans görevi verilebilir. Bu görev; kontrol listesi, bütüncül dereceli puanlama anahtarları ile değerlendirilebilir. Sürtünmeyi artıran ve azaltan durumların gözlemlenebileceği bir model tasarlamalarına yönelik performans görevi verilebilir. Bu görev, analitik derecelipuanlama anahtarı kullanılarak değerlendirilebilir. Ayrı"
+      "b) Sürtünmeyi artıran ve azaltan durumlara ilişkin gözlemleri sonucunda modelini geliştirir."
     ],
     "source": {
       "title": "Türkiye Yüzyılı Maarif Modeli Fen Bilimleri Dersi Öğretim Programı",
