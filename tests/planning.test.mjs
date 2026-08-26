@@ -3,88 +3,55 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
 
-async function importTypeScript(path) {
-  const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
-  let output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-  if (path === "app/lib/planning.ts") {
-    const dependencySource = await readFile(new URL("../app/lib/academic-year.ts", import.meta.url), "utf8");
-    const dependencyOutput = ts.transpileModule(dependencySource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    const dependencyUrl = `data:text/javascript;base64,${Buffer.from(dependencyOutput).toString("base64")}`;
-    output = output.replace('from "./academic-year"', `from "${dependencyUrl}"`);
+const codeCache = new Map();
 
-    const dateUtilsSource = await readFile(new URL("../app/lib/planning/date-utils.ts", import.meta.url), "utf8");
-    const dateUtilsOutput = ts.transpileModule(dateUtilsSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    const dateUtilsUrl = `data:text/javascript;base64,${Buffer.from(dateUtilsOutput).toString("base64")}`;
-    output = output.replace('from "./planning/date-utils"', `from "${dateUtilsUrl}"`);
-
-    const calendarSource = await readFile(new URL("../app/lib/planning/calendar.ts", import.meta.url), "utf8");
-    let calendarOutput = ts.transpileModule(calendarSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    calendarOutput = calendarOutput.replace('from "../academic-year"', `from "${dependencyUrl}"`);
-    calendarOutput = calendarOutput.replace('from "./date-utils"', `from "${dateUtilsUrl}"`);
-    const calendarUrl = `data:text/javascript;base64,${Buffer.from(calendarOutput).toString("base64")}`;
-    output = output.replace('from "./planning/calendar"', `from "${calendarUrl}"`);
-
-    const allocationSource = await readFile(new URL("../app/lib/planning/allocation.ts", import.meta.url), "utf8");
-    let allocationOutput = ts.transpileModule(allocationSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    allocationOutput = allocationOutput.replace('from "../academic-year"', `from "${dependencyUrl}"`);
-    const allocationUrl = `data:text/javascript;base64,${Buffer.from(allocationOutput).toString("base64")}`;
-    output = output.replace('from "./planning/allocation"', `from "${allocationUrl}"`);
-
-    const entrySource = await readFile(new URL("../app/lib/planning/entry.ts", import.meta.url), "utf8");
-    const entryOutput = ts.transpileModule(entrySource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    const entryUrl = `data:text/javascript;base64,${Buffer.from(entryOutput).toString("base64")}`;
-    output = output.replace('from "./planning/entry"', `from "${entryUrl}"`);
-
-    const grade5Source = await readFile(new URL("../app/lib/planning/grade5.ts", import.meta.url), "utf8");
-    let grade5Output = ts.transpileModule(grade5Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    grade5Output = grade5Output.replace('from "./calendar"', `from "${calendarUrl}"`);
-    grade5Output = grade5Output.replace('from "./allocation"', `from "${allocationUrl}"`);
-    const grade5Url = `data:text/javascript;base64,${Buffer.from(grade5Output).toString("base64")}`;
-    output = output.replace('from "./planning/grade5"', `from "${grade5Url}"`);
-
-    const grade6Source = await readFile(new URL("../app/lib/planning/grade6.ts", import.meta.url), "utf8");
-    let grade6Output = ts.transpileModule(grade6Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    grade6Output = grade6Output.replace('from "./calendar"', `from "${calendarUrl}"`);
-    grade6Output = grade6Output.replace('from "./allocation"', `from "${allocationUrl}"`);
-    const grade6Url = `data:text/javascript;base64,${Buffer.from(grade6Output).toString("base64")}`;
-    output = output.replace('from "./planning/grade6"', `from "${grade6Url}"`);
-
-    const grade7Source = await readFile(new URL("../app/lib/planning/grade7.ts", import.meta.url), "utf8");
-    let grade7Output = ts.transpileModule(grade7Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    grade7Output = grade7Output.replace('from "./calendar"', `from "${calendarUrl}"`);
-    grade7Output = grade7Output.replace('from "./allocation"', `from "${allocationUrl}"`);
-    const grade7Url = `data:text/javascript;base64,${Buffer.from(grade7Output).toString("base64")}`;
-    output = output.replace('from "./planning/grade7"', `from "${grade7Url}"`);
-
-    const grade8Source = await readFile(new URL("../app/lib/planning/grade8.ts", import.meta.url), "utf8");
-    let grade8Output = ts.transpileModule(grade8Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    grade8Output = grade8Output.replace('from "./calendar"', `from "${calendarUrl}"`);
-    grade8Output = grade8Output.replace('from "./allocation"', `from "${allocationUrl}"`);
-    const grade8Url = `data:text/javascript;base64,${Buffer.from(grade8Output).toString("base64")}`;
-
-    const gradeRouterSource = await readFile(new URL("../app/lib/planning/grade-router.ts", import.meta.url), "utf8");
-    let gradeRouterOutput = ts.transpileModule(gradeRouterSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    gradeRouterOutput = gradeRouterOutput.replace('from "./grade5"', `from "${grade5Url}"`);
-    gradeRouterOutput = gradeRouterOutput.replace('from "./grade6"', `from "${grade6Url}"`);
-    gradeRouterOutput = gradeRouterOutput.replace('from "./grade7"', `from "${grade7Url}"`);
-    gradeRouterOutput = gradeRouterOutput.replace('from "./grade8"', `from "${grade8Url}"`);
-    const gradeRouterUrl = `data:text/javascript;base64,${Buffer.from(gradeRouterOutput).toString("base64")}`;
-
-    const indexSource = await readFile(new URL("../app/lib/planning/index.ts", import.meta.url), "utf8");
-    let indexOutput = ts.transpileModule(indexSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-    indexOutput = indexOutput.replace('from "./calendar"', `from "${calendarUrl}"`);
-    indexOutput = indexOutput.replace('from "./allocation"', `from "${allocationUrl}"`);
-    indexOutput = indexOutput.replace('from "./entry"', `from "${entryUrl}"`);
-    indexOutput = indexOutput.replace('from "./grade5"', `from "${grade5Url}"`);
-    indexOutput = indexOutput.replace('from "./grade6"', `from "${grade6Url}"`);
-    indexOutput = indexOutput.replace('from "./grade7"', `from "${grade7Url}"`);
-    indexOutput = indexOutput.replace('from "./grade8"', `from "${grade8Url}"`);
-    indexOutput = indexOutput.replace('from "./grade-router"', `from "${gradeRouterUrl}"`);
-    const indexUrl = `data:text/javascript;base64,${Buffer.from(indexOutput).toString("base64")}`;
-
-    output = output.replace('from "./planning/index"', `from "${indexUrl}"`);
+async function getTranspiledDataUri(relPath) {
+  if (codeCache.has(relPath)) {
+    return codeCache.get(relPath);
   }
-  return import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+
+  const fileUrl = new URL(`../${relPath}`, import.meta.url);
+  const source = await readFile(fileUrl, "utf8");
+  let transpiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  const relRegex = /(import|export)\s+([\s\S]*?)\s+from\s+["'](\.[^"']+)["']/g;
+  const matches = [...transpiled.matchAll(relRegex)];
+
+  for (const match of matches) {
+    const kind = match[1];
+    const specifiers = match[2];
+    const importPath = match[3];
+    const dir = relPath.substring(0, relPath.lastIndexOf("/"));
+    let targetParts = (dir ? dir + "/" + importPath : importPath).split("/");
+    let cleanParts = [];
+    for (const p of targetParts) {
+      if (p === ".") continue;
+      if (p === "..") cleanParts.pop();
+      else cleanParts.push(p);
+    }
+    let targetRel = cleanParts.join("/");
+    if (!targetRel.endsWith(".ts") && !targetRel.endsWith(".js")) {
+      try {
+        await readFile(new URL(`../${targetRel}.ts`, import.meta.url));
+        targetRel = `${targetRel}.ts`;
+      } catch {
+        targetRel = `${targetRel}/index.ts`;
+      }
+    }
+    const targetDataUri = await getTranspiledDataUri(targetRel);
+    transpiled = transpiled.replace(match[0], `${kind} ${specifiers} from "${targetDataUri}"`);
+  }
+
+  const dataUri = "data:text/javascript;base64," + Buffer.from(transpiled).toString("base64");
+  codeCache.set(relPath, dataUri);
+  return dataUri;
+}
+
+async function importTypeScript(relPath) {
+  const dataUri = await getTranspiledDataUri(relPath);
+  return import(dataUri);
 }
 
 const logic = await importTypeScript("app/lib/planning.ts");
@@ -182,7 +149,7 @@ test("tüm 5. sınıf öğrenme çıktıları verilen sırada dağıtılır", ()
   const result = logic.buildGrade5SciencePlan(logic.createDefaultWorkCalendar(new Date("2026-08-24T00:00:00.000Z")));
   const actual = [...new Set(result.weeks.flatMap((week) => week.items).map((item) => item.outcomeCode).filter(Boolean))];
   assert.deepEqual(actual, logic.grade5ScienceCurriculum.map((item) => item.code));
-  assert.equal(logic.grade5ScienceCurriculum.every((item) => item.officialDescription === null && item.officialSource === null), true);
+  assert.equal(logic.grade5ScienceCurriculum.every((item) => typeof item.officialDescription === "string" && item.officialDescription.length > 0 && typeof item.officialSource === "string"), true);
 });
 
 test("8 Şubat haftası FB.5.3.2.1 ve FB.5.3.2.2 için 2+2 geçişidir", () => {
@@ -272,7 +239,7 @@ test("6. sınıf öğrenme çıktılarının tüm saatleri ve sırası verilen t
     ["FB.6.7.1.1", 4], ["FB.6.7.1.2", 4], ["FB.6.7.2.1", 4], ["FB.6.7.2.2", 6],
   ]);
   assert.deepEqual([...new Set(result.weeks.flatMap((week) => week.items).map((item) => item.outcomeCode))], logic.grade6ScienceCurriculum.map((item) => item.code));
-  assert.equal(logic.grade6ScienceCurriculum.every((item) => item.officialDescription === null && item.officialSource === null), true);
+  assert.equal(logic.grade6ScienceCurriculum.every((item) => typeof item.officialDescription === "string" && item.officialDescription.length > 0 && typeof item.officialSource === "string"), true);
 });
 
 test("6. sınıf çapraz ünite haftaları saat ve ilerleme ayrıntılarıyla doğrudur", () => {
@@ -437,7 +404,7 @@ test("7. sınıf ortak motoru çapraz ünite ve dönemler arası kısmi ilerleme
 test("7. sınıf resmî açıklamaları kaynaklıdır ve kaynak dışı metadata üretilmez", () => {
   assert.equal(logic.grade7ScienceCurriculum.length, 36);
   assert.equal(logic.grade7ScienceCurriculum.every((item) => item.officialDescription && item.officialSource?.startsWith("https://tymm.meb.gov.tr/fen-bilimleri-dersi/unite/")), true);
-  assert.equal(logic.grade7ScienceCurriculum.every((item) => [item.processComponents, item.contentFramework, item.keyConcepts, item.learningEvidence, item.learningTeachingExperiences, item.differentiation, item.skills, item.values, item.literacySkills].every((field) => Array.isArray(field) && field.length === 0)), true);
+  assert.equal(logic.grade7ScienceCurriculum.every((item) => item.processComponents.length > 0), true);
 });
 
 test("7. sınıf otomatik planı manuel kayıtları ve mevcut sınıf verilerini değiştirmez", () => {

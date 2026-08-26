@@ -3,85 +3,59 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
 
-async function transpileToDataUrl(path) {
-  const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
-  const output = ts.transpileModule(source, {
+const codeCache = new Map();
+
+async function getTranspiledDataUri(relPath) {
+  if (codeCache.has(relPath)) {
+    return codeCache.get(relPath);
+  }
+
+  const fileUrl = new URL(`../${relPath}`, import.meta.url);
+  const source = await readFile(fileUrl, "utf8");
+  let transpiled = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  return `data:text/javascript;base64,${Buffer.from(output).toString("base64")}`;
+
+  const relRegex = /(import|export)\s+([\s\S]*?)\s+from\s+["'](\.[^"']+)["']/g;
+  const matches = [...transpiled.matchAll(relRegex)];
+
+  for (const match of matches) {
+    const kind = match[1];
+    const specifiers = match[2];
+    const importPath = match[3];
+    const dir = relPath.substring(0, relPath.lastIndexOf("/"));
+    let targetParts = (dir ? dir + "/" + importPath : importPath).split("/");
+    let cleanParts = [];
+    for (const p of targetParts) {
+      if (p === ".") continue;
+      if (p === "..") cleanParts.pop();
+      else cleanParts.push(p);
+    }
+    let targetRel = cleanParts.join("/");
+    if (!targetRel.endsWith(".ts") && !targetRel.endsWith(".js")) {
+      try {
+        await readFile(new URL(`../${targetRel}.ts`, import.meta.url));
+        targetRel = `${targetRel}.ts`;
+      } catch {
+        targetRel = `${targetRel}/index.ts`;
+      }
+    }
+    const targetDataUri = await getTranspiledDataUri(targetRel);
+    transpiled = transpiled.replace(match[0], `${kind} ${specifiers} from "${targetDataUri}"`);
+  }
+
+  const dataUri = "data:text/javascript;base64," + Buffer.from(transpiled).toString("base64");
+  codeCache.set(relPath, dataUri);
+  return dataUri;
 }
 
-const academicYearUrl = await transpileToDataUrl("app/lib/academic-year.ts");
-const academicYear = await import(academicYearUrl);
-const dateUtilsUrl = await transpileToDataUrl("app/lib/planning/date-utils.ts");
+async function importTypeScript(relPath) {
+  const dataUri = await getTranspiledDataUri(relPath);
+  return import(dataUri);
+}
 
-const calendarSource = await readFile(new URL("../app/lib/planning/calendar.ts", import.meta.url), "utf8");
-let calendarOutput = ts.transpileModule(calendarSource, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-}).outputText;
-calendarOutput = calendarOutput.replace('from "../academic-year"', `from "${academicYearUrl}"`);
-calendarOutput = calendarOutput.replace('from "./date-utils"', `from "${dateUtilsUrl}"`);
-const calendarUrl = `data:text/javascript;base64,${Buffer.from(calendarOutput).toString("base64")}`;
-
-const allocationSource = await readFile(new URL("../app/lib/planning/allocation.ts", import.meta.url), "utf8");
-let allocationOutput = ts.transpileModule(allocationSource, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-}).outputText;
-allocationOutput = allocationOutput.replace('from "../academic-year"', `from "${academicYearUrl}"`);
-const allocationUrl = `data:text/javascript;base64,${Buffer.from(allocationOutput).toString("base64")}`;
-
-const entryUrl = await transpileToDataUrl("app/lib/planning/entry.ts");
-
-const grade5Source = await readFile(new URL("../app/lib/planning/grade5.ts", import.meta.url), "utf8");
-let grade5Output = ts.transpileModule(grade5Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-grade5Output = grade5Output.replace('from "./calendar"', `from "${calendarUrl}"`);
-grade5Output = grade5Output.replace('from "./allocation"', `from "${allocationUrl}"`);
-const grade5Url = `data:text/javascript;base64,${Buffer.from(grade5Output).toString("base64")}`;
-
-const grade6Source = await readFile(new URL("../app/lib/planning/grade6.ts", import.meta.url), "utf8");
-let grade6Output = ts.transpileModule(grade6Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-grade6Output = grade6Output.replace('from "./calendar"', `from "${calendarUrl}"`);
-grade6Output = grade6Output.replace('from "./allocation"', `from "${allocationUrl}"`);
-const grade6Url = `data:text/javascript;base64,${Buffer.from(grade6Output).toString("base64")}`;
-
-const grade7Source = await readFile(new URL("../app/lib/planning/grade7.ts", import.meta.url), "utf8");
-let grade7Output = ts.transpileModule(grade7Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-grade7Output = grade7Output.replace('from "./calendar"', `from "${calendarUrl}"`);
-grade7Output = grade7Output.replace('from "./allocation"', `from "${allocationUrl}"`);
-const grade7Url = `data:text/javascript;base64,${Buffer.from(grade7Output).toString("base64")}`;
-
-const grade8Source = await readFile(new URL("../app/lib/planning/grade8.ts", import.meta.url), "utf8");
-let grade8Output = ts.transpileModule(grade8Source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-grade8Output = grade8Output.replace('from "./calendar"', `from "${calendarUrl}"`);
-grade8Output = grade8Output.replace('from "./allocation"', `from "${allocationUrl}"`);
-const grade8Url = `data:text/javascript;base64,${Buffer.from(grade8Output).toString("base64")}`;
-
-const gradeRouterSource = await readFile(new URL("../app/lib/planning/grade-router.ts", import.meta.url), "utf8");
-let gradeRouterOutput = ts.transpileModule(gradeRouterSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-gradeRouterOutput = gradeRouterOutput.replace('from "./grade5"', `from "${grade5Url}"`);
-gradeRouterOutput = gradeRouterOutput.replace('from "./grade6"', `from "${grade6Url}"`);
-gradeRouterOutput = gradeRouterOutput.replace('from "./grade7"', `from "${grade7Url}"`);
-gradeRouterOutput = gradeRouterOutput.replace('from "./grade8"', `from "${grade8Url}"`);
-const gradeRouterUrl = `data:text/javascript;base64,${Buffer.from(gradeRouterOutput).toString("base64")}`;
-
-const indexSource = await readFile(new URL("../app/lib/planning/index.ts", import.meta.url), "utf8");
-let indexOutput = ts.transpileModule(indexSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-indexOutput = indexOutput.replace('from "./calendar"', `from "${calendarUrl}"`);
-indexOutput = indexOutput.replace('from "./allocation"', `from "${allocationUrl}"`);
-indexOutput = indexOutput.replace('from "./entry"', `from "${entryUrl}"`);
-indexOutput = indexOutput.replace('from "./grade5"', `from "${grade5Url}"`);
-indexOutput = indexOutput.replace('from "./grade6"', `from "${grade6Url}"`);
-indexOutput = indexOutput.replace('from "./grade7"', `from "${grade7Url}"`);
-indexOutput = indexOutput.replace('from "./grade8"', `from "${grade8Url}"`);
-indexOutput = indexOutput.replace('from "./grade-router"', `from "${gradeRouterUrl}"`);
-const indexUrl = `data:text/javascript;base64,${Buffer.from(indexOutput).toString("base64")}`;
-
-const planningSource = await readFile(new URL("../app/lib/planning.ts", import.meta.url), "utf8");
-let planningOutput = ts.transpileModule(planningSource, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-}).outputText;
-planningOutput = planningOutput.replace('from "./planning/index"', `from "${indexUrl}"`);
-const planning = await import(`data:text/javascript;base64,${Buffer.from(planningOutput).toString("base64")}`);
+const academicYear = await importTypeScript("app/lib/academic-year.ts");
+const planning = await importTypeScript("app/lib/planning.ts");
 
 const utcDate = (date) => new Date(`${date}T00:00:00.000Z`);
 

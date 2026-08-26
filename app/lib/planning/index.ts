@@ -21,6 +21,7 @@ export {
 
 export { distributeHoursToWeeks } from "./allocation";
 export { updateAnnualPlanEntry } from "./entry";
+export { createPlanningCurriculumOutcome } from "./curriculum-resolver";
 
 export {
   grade5ScienceUnitHours,

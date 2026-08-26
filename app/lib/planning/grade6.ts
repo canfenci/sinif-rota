@@ -2,6 +2,7 @@ import type { WorkCalendar } from "../types";
 import type { CurriculumOutcome, Grade6SciencePlan, ScienceBlock } from "./types";
 import { buildPlanWeeks, isSupportedSciencePlanCalendar, SCIENCE_PLAN_SCHOOL_YEAR } from "./calendar";
 import { allocateScienceWeeks } from "./allocation";
+import { createPlanningCurriculumOutcome } from "./curriculum-resolver";
 
 export const grade6ScienceUnitHours = [
   { unit: 1, title: "Güneş Sistemi ve Tutulmalar", curriculumHours: 12, planHours: 12 },
@@ -16,24 +17,7 @@ export const grade6ScienceUnitHours = [
 const grade6UnitTitles = new Map<number, string>(grade6ScienceUnitHours.map((item) => [item.unit, item.title]));
 
 function grade6Outcome(unit: number, code: string): CurriculumOutcome {
-  return {
-    grade: 6,
-    curriculumVersion: "Türkiye Yüzyılı Maarif Modeli",
-    unitId: `FB.6.${unit}`,
-    unitTitle: grade6UnitTitles.get(unit) ?? `${unit}. Ünite`,
-    code,
-    officialDescription: null,
-    officialSource: null,
-    processComponents: [],
-    contentFramework: [],
-    keyConcepts: [],
-    learningEvidence: [],
-    learningTeachingExperiences: [],
-    differentiation: [],
-    skills: [],
-    values: [],
-    literacySkills: [],
-  };
+  return createPlanningCurriculumOutcome(6, unit, code, undefined, grade6UnitTitles.get(unit));
 }
 
 export const grade6ScienceCurriculum: CurriculumOutcome[] = [
