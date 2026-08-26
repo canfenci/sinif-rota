@@ -55,6 +55,10 @@ Doğrulama:
 npm test
 ```
 
+## Yayın ve Dağıtım
+
+Yayınlama ve canlı doğrulama adımları: [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
+
 ## Veri yaklaşımı
 
 Bu prototip Firebase veya başka bir bulut veri tabanı kullanmaz. Veriler tarayıcıdaki yerel depoda tutulur. Veri erişimi `app/lib/storage.ts` altında ayrı bir repository olarak tanımlandığı için ileride bulut tabanlı bir uygulamaya geçiş UI bileşenlerini değiştirmeden yapılabilir.
