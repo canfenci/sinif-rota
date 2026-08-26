@@ -92,21 +92,68 @@ function ScienceWeekItems({ items }: { items: SciencePlanItem[] }) {
   return <span className="science-week-items">{items.map((item, index) => <span key={`${item.unit}-${item.outcomeCode ?? item.title}-${index}`}><strong>{item.title}</strong>{item.outcomeCodes && item.outcomeCodes.length > 1 && <small>{item.outcomeCodes.join(" · ")}</small>}<b>{item.hours} saat</b>{item.badge && <em>{item.badge}</em>}</span>)}</span>;
 }
 
-const detailSections: Array<[keyof NonNullable<SciencePlanItem["curriculum"]>, string]> = [
-  ["processComponents", "Süreç Bileşenleri"], ["contentFramework", "İçerik Çerçevesi"], ["keyConcepts", "Anahtar Kavramlar"], ["learningEvidence", "Öğrenme Kanıtları"], ["learningTeachingExperiences", "Öğrenme-Öğretme Yaşantıları"], ["differentiation", "Farklılaştırma"],
-];
-
-function ScienceDetailCards({ items, className, week }: { items: SciencePlanItem[]; className: string; week: PlanWeek }) {
-  return <section className="science-detail-list" aria-label="Haftanın öğrenme çıktıları">{items.map((item, index) => {
+export function ScienceDetailCards({ items, className, week }: { items: SciencePlanItem[]; className: string; week: PlanWeek }) {
+  const isAnyGrade8 = items.some((item) => item.allocation.grade === 8);
+  return <section className="science-detail-list" aria-label={isAnyGrade8 ? "Haftanın kazanımları" : "Haftanın öğrenme çıktıları"}>{items.map((item, index) => {
     const allocation = item.allocation;
+    const isGrade8 = allocation.grade === 8;
     const curricula = item.curricula?.length ? item.curricula : item.curriculum ? [item.curriculum] : [];
     const outcomeCodes = item.outcomeCodes?.length ? item.outcomeCodes : item.outcomeCode ? [item.outcomeCode] : [];
-    const skills = curricula.flatMap((entry) => [...entry.skills, ...entry.values, ...entry.literacySkills]);
-    const availableSections = detailSections.map(([key, label]) => [key, label, curricula.flatMap((entry) => entry[key] as string[])] as const).filter(([, , values]) => values.length > 0);
+    const codeLabel = isGrade8 ? "Kazanım Kodu" : "Öğrenme Çıktısı Kodu";
+    const descriptionHeading = isGrade8 ? "Kazanım" : "Öğrenme Çıktısı";
+
     return <article className="science-detail-card" key={`${item.outcomeCode ?? item.title}-${index}`}>
       <header><span>{item.unit === 0 ? "Uygulama" : `${item.unit}. Ünite`}</span><strong>{item.title}</strong></header>
-      <dl><div><dt>Hafta</dt><dd>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))}</dd></div><div><dt>Sınıf</dt><dd>{className}</dd></div><div><dt>Ünite</dt><dd>{item.unitTitle}</dd></div><div><dt>Öğrenme çıktısı</dt><dd>{outcomeCodes.join(" · ") || "—"}</dd></div>{curricula.length > 0 && <div className="detail-wide"><dt>Resmî açıklama</dt><dd>{curricula.map((entry) => <span key={entry.code}><strong>{entry.code}</strong> — {entry.officialDescription}</span>)}</dd></div>}<div><dt>Bu hafta</dt><dd>{allocation.allocatedHours} saat</dd></div><div><dt>Toplam plan</dt><dd>{allocation.plannedTotalHours} saat</dd></div><div><dt>Önce işlenen</dt><dd>{allocation.completedBeforeHours} saat</dd></div><div><dt>Hafta sonu</dt><dd>{allocation.completedAfterHours} saat</dd></div><div className="detail-wide"><dt>Öğretmen notu</dt><dd>{allocation.teacherNote ?? "—"}</dd></div></dl>
-      {(availableSections.length > 0 || skills.length > 0) && <div className="science-detail-accordions">{availableSections.map(([key, label, values]) => <details key={key}><summary>{label}</summary><p>{[...new Set(values)].join(" · ")}</p></details>)}{skills.length > 0 && <details><summary>Beceri / Değer / Okuryazarlık</summary><p>{[...new Set(skills)].join(" · ")}</p></details>}</div>}
+      <dl>
+        <div><dt>Hafta</dt><dd>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))}</dd></div>
+        <div><dt>Sınıf</dt><dd>{className}</dd></div>
+        <div><dt>Ünite</dt><dd>{item.unitTitle}</dd></div>
+        <div><dt>{codeLabel}</dt><dd>{outcomeCodes.join(" · ") || "—"}</dd></div>
+        <div className="detail-wide">
+          <dt>{descriptionHeading}</dt>
+          <dd>
+            {curricula.length > 0 ? (
+              curricula.map((entry) => (
+                <div className="official-outcome-entry" key={entry.code}>
+                  <div className="official-outcome-header">
+                    <span className="official-outcome-code">{entry.code}</span>
+                    {entry.officialSource && (
+                      <a
+                        href={entry.officialSource}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="official-source-link"
+                      >
+                        Resmî Kaynak ↗
+                      </a>
+                    )}
+                  </div>
+                  <p className="official-outcome-text">
+                    {entry.officialDescription ?? "Resmî açıklama bulunamadı."}
+                  </p>
+                  {!isGrade8 && entry.processComponents && entry.processComponents.length > 0 && (
+                    <div className="process-components-block">
+                      <span className="process-components-title">Süreç Bileşenleri</span>
+                      <ol className="process-components-list">
+                        {entry.processComponents.map((comp, compIdx) => (
+                          <li key={compIdx}>{comp}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <span className="official-description-missing">Resmî açıklama bulunamadı.</span>
+            )}
+          </dd>
+        </div>
+        <div><dt>Bu hafta</dt><dd>{allocation.allocatedHours} saat</dd></div>
+        <div><dt>Toplam plan</dt><dd>{allocation.plannedTotalHours} saat</dd></div>
+        <div><dt>Önce işlenen</dt><dd>{allocation.completedBeforeHours} saat</dd></div>
+        <div><dt>Hafta sonu</dt><dd>{allocation.completedAfterHours} saat</dd></div>
+        {allocation.teacherNote && <div className="detail-wide"><dt>Öğretmen notu</dt><dd>{allocation.teacherNote}</dd></div>}
+      </dl>
     </article>;
   })}</section>;
 }
