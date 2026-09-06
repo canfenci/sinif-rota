@@ -10,6 +10,8 @@ export interface CheckSession {
   type: CheckType;
   date: string;
   statuses: Record<string, CheckStatus>;
+  weekStart?: string;
+  visitIndex?: number;
   [key: string]: unknown;
 }
 export interface CalendarBreak { id: string; title: string; startDate: string; endDate: string; grades?: number[]; [key: string]: unknown; }

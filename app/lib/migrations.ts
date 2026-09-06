@@ -49,7 +49,7 @@ function isValidClass(schoolClass: unknown): schoolClass is SchoolClass {
   return schoolClass.students.every(isValidStudent);
 }
 
-function isValidSession(session: unknown): session is CheckSession {
+export function isValidSession(session: unknown): session is CheckSession {
   if (!isPlainObject(session)) return false;
   if (typeof session.id !== "string" || session.id.trim() === "") return false;
   if (typeof session.classId !== "string" || session.classId.trim() === "") return false;
@@ -57,7 +57,29 @@ function isValidSession(session: unknown): session is CheckSession {
   if (typeof session.type !== "string" || !VALID_CHECK_TYPES.includes(session.type as CheckType)) return false;
   if (typeof session.date !== "string" || Number.isNaN(Date.parse(session.date))) return false;
   if (!isPlainObject(session.statuses)) return false;
-  return Object.values(session.statuses).every((s) => typeof s === "string" && VALID_CHECK_STATUSES.includes(s as CheckStatus));
+  if (!Object.values(session.statuses).every((s) => typeof s === "string" && VALID_CHECK_STATUSES.includes(s as CheckStatus))) return false;
+  if (session.weekStart !== undefined) {
+    if (typeof session.weekStart !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(session.weekStart)) return false;
+    const [year, month, day] = session.weekStart.split("-").map(Number);
+    const dateObj = new Date(Date.UTC(year, month - 1, day));
+    if (
+      dateObj.getUTCFullYear() !== year ||
+      dateObj.getUTCMonth() !== month - 1 ||
+      dateObj.getUTCDate() !== day
+    ) {
+      return false;
+    }
+  }
+  if (session.visitIndex !== undefined) {
+    if (
+      typeof session.visitIndex !== "number" ||
+      !Number.isInteger(session.visitIndex) ||
+      session.visitIndex < 1
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isValidCalendarBreak(item: unknown): item is CalendarBreak {
@@ -113,7 +135,7 @@ function deepCloneClass(schoolClass: SchoolClass): SchoolClass {
   };
 }
 
-function deepCloneSession(session: CheckSession): CheckSession {
+export function deepCloneSession(session: CheckSession): CheckSession {
   return {
     ...session,
     id: session.id,
@@ -122,6 +144,8 @@ function deepCloneSession(session: CheckSession): CheckSession {
     type: session.type,
     date: session.date,
     statuses: { ...session.statuses },
+    ...(session.weekStart !== undefined ? { weekStart: session.weekStart } : {}),
+    ...(session.visitIndex !== undefined ? { visitIndex: session.visitIndex } : {}),
   };
 }
 
