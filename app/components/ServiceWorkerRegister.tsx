@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function collectPageAssetUrls(): string[] {
   if (typeof window === "undefined" || typeof document === "undefined") return [];
@@ -38,6 +38,9 @@ function sendWarmCacheMessage(worker: ServiceWorker | null | undefined) {
 }
 
 export function ServiceWorkerRegister() {
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const updateShownRef = useRef(false);
+
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") {
       return;
@@ -45,6 +48,13 @@ export function ServiceWorkerRegister() {
 
     let disposed = false;
     let controllerListenerAttached = false;
+
+    const notifyUpdateReady = () => {
+      if (disposed) return;
+      if (updateShownRef.current) return;
+      updateShownRef.current = true;
+      setUpdateAvailable(true);
+    };
 
     const handleControllerChange = () => {
       sendWarmCacheMessage(navigator.serviceWorker.controller);
@@ -61,6 +71,11 @@ export function ServiceWorkerRegister() {
             sendWarmCacheMessage(navigator.serviceWorker.controller);
           }
 
+          // A worker already waiting to take over is a pending update.
+          if (registration.waiting) {
+            notifyUpdateReady();
+          }
+
           // When a new worker takes control, warm cache
           navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
           controllerListenerAttached = true;
@@ -71,6 +86,7 @@ export function ServiceWorkerRegister() {
               installingWorker.onstatechange = () => {
                 if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
                   console.info("[PWA] Yeni sürüm arka planda hazırlandı.");
+                  notifyUpdateReady();
                 }
               };
             }
@@ -91,5 +107,17 @@ export function ServiceWorkerRegister() {
     };
   }, []);
 
-  return null;
+  if (!updateAvailable) return null;
+
+  return (
+    <div className="update-banner" role="status" aria-live="polite">
+      <div className="update-banner-text">
+        <strong>Yeni sürüm hazır</strong>
+        <p>Uygulamayı güncellemek için açık sekmeleri kapatıp yeniden açın.</p>
+      </div>
+      <button type="button" className="update-banner-dismiss" onClick={() => setUpdateAvailable(false)}>
+        Tamam
+      </button>
+    </div>
+  );
 }
