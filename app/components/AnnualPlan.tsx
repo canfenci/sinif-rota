@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { isSupportedAcademicYear, type CalendarSupportState } from "../lib/academic-year";
 import { buildPlanWeeks, buildSciencePlanForClass, isValidWorkCalendar, type PlanWeek, type SciencePlanItem } from "../lib/planning";
 import type { AnnualPlanEntry, CalendarBreak, SchoolClass, WorkCalendar } from "../lib/types";
@@ -10,6 +10,80 @@ const shortDate = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "sho
 const fullDate = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const asDate = (value: string) => new Date(`${value}T00:00:00.000Z`);
 
+export function toLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const noopSubscribe = () => () => {};
+
+export function useClientLocalDateString(): string | null {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => toLocalDateString(new Date()),
+    () => null,
+  );
+}
+
+export function formatWeekDateRange(startDateStr: string, endDateStr: string): string {
+  const start = asDate(startDateStr);
+  const end = asDate(endDateStr);
+
+  const startDay = start.getUTCDate();
+  const endDay = end.getUTCDate();
+  const startMonth = start.toLocaleDateString("tr-TR", { month: "long", timeZone: "UTC" }).toLocaleUpperCase("tr-TR");
+  const endMonth = end.toLocaleDateString("tr-TR", { month: "long", timeZone: "UTC" }).toLocaleUpperCase("tr-TR");
+
+  if (startMonth === endMonth) {
+    return `${startDay}–${endDay} ${startMonth}`;
+  }
+  return `${startDay} ${startMonth}–${endDay} ${endMonth}`;
+}
+
+/**
+ * Semantik: Öğretim haftası gösterim bitiş tarihini belirler.
+ *
+ * Kurallar:
+ * 1. Yalnızca standart Pazartesi–Pazar takvim bloğunda (diffDays === 6 ve end Pazar günü)
+ *    öğretim haftası gösterim bitişi Cuma (startDate + 4 gün) olarak hesaplanır.
+ * 2. PlanWeek.endDate zaten Cuma veya kısaltılmış bir tarih olarak geliyorsa (diffDays < 6
+ *    veya özel ara tatil/dönem sonu), bu orijinal endDate korunur, değiştirilmez.
+ * 3. PlanWeek verisini mutate etmez; planning engine ve takvim hesaplamalarına dokunmaz,
+ *    yalnızca UI gösterim katmanında çalışır.
+ */
+export function getWeekDisplayEndDate(week: PlanWeek): string {
+  const start = asDate(week.startDate);
+  const end = asDate(week.endDate);
+  const diffDays = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+  // Yalnızca standart Pazartesi-Pazar (diffDays === 6 ve Pazar) durumunda Cuma (+4 gün)
+  if (diffDays === 6 && end.getUTCDay() === 0) {
+    const friday = new Date(start.getTime() + 4 * 24 * 60 * 60 * 1000);
+    return friday.toISOString().slice(0, 10);
+  }
+  // Kısaltılmış veya özel takvim tarihi korunur
+  return week.endDate;
+}
+
+export const getTeachingWeekDisplayEndDate = getWeekDisplayEndDate;
+
+export function findInitialWeekIndex(weeks: PlanWeek[], target: Date | string = new Date()): number {
+  if (!weeks.length) return 0;
+  const today = typeof target === "string" ? target : toLocalDateString(target);
+  const found = weeks.findIndex((w) => today >= w.startDate && today <= w.endDate);
+  return found >= 0 ? found : 0;
+}
+
+export function getNextWeekIndex(currentIndex: number, totalWeeks: number): number {
+  if (totalWeeks <= 0) return 0;
+  return Math.min(currentIndex + 1, totalWeeks - 1);
+}
+
+export function getPreviousWeekIndex(currentIndex: number): number {
+  return Math.max(0, currentIndex - 1);
+}
+
 export function AnnualPlan({ classes, calendar, calendarSupportState, entries, onCalendar, onEntry, onNotify }: {
   classes: SchoolClass[];
   calendar: WorkCalendar;
@@ -20,28 +94,36 @@ export function AnnualPlan({ classes, calendar, calendarSupportState, entries, o
   onNotify: (message: string) => void;
 }) {
   const [classId, setClassId] = useState(classes[0]?.id ?? "");
-  const [filter, setFilter] = useState<"all" | "planned" | "completed" | "empty">("all");
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [entryDraft, setEntryDraft] = useState<EntryDraft | null>(null);
+
   const selectedClass = classes.find((item) => item.id === classId) ?? classes[0];
   const selectedClassId = selectedClass?.id ?? "";
   const isHistorical = calendarSupportState === "supported_historical";
+
   const sciencePlan = useMemo(() => selectedClass ? buildSciencePlanForClass(selectedClass.name, calendar) : null, [calendar, selectedClass]);
   const weeks = useMemo(() => buildPlanWeeks(calendar, sciencePlan?.grade), [calendar, sciencePlan?.grade]);
+  const clientLocalDate = useClientLocalDateString();
+  const [userSelectedIndex, setUserSelectedIndex] = useState<number | null>(null);
+
   const scienceByWeek = new Map(sciencePlan?.weeks.map((week) => [week.weekStart, week]) ?? []);
   const planEntries = entries.filter((item) => item.classId === selectedClassId && item.schoolYear === calendar.schoolYear);
   const byWeek = new Map(planEntries.map((item) => [item.weekStart, item]));
   const teachable = weeks.filter((week) => week.teachingDays > 0 || scienceByWeek.has(week.startDate));
   const completed = teachable.filter((week) => byWeek.get(week.startDate)?.completed).length;
   const planned = teachable.filter((week) => byWeek.get(week.startDate)?.topic || scienceByWeek.has(week.startDate)).length;
-  const visible = weeks.filter((week) => {
-    const entry = byWeek.get(week.startDate);
-    const hasPlan = Boolean(entry?.topic) || scienceByWeek.has(week.startDate);
-    if (filter === "planned") return hasPlan && !entry?.completed;
-    if (filter === "completed") return Boolean(entry?.completed);
-    if (filter === "empty") return (week.teachingDays > 0 || scienceByWeek.has(week.startDate)) && !hasPlan;
-    return true;
-  });
+
+  const rawIndex = userSelectedIndex !== null
+    ? userSelectedIndex
+    : (clientLocalDate ? findInitialWeekIndex(weeks, clientLocalDate) : 0);
+  const activeWeekIndex = Math.max(0, Math.min(rawIndex, Math.max(0, weeks.length - 1)));
+  const selectedWeek = weeks[activeWeekIndex];
+  const canPrev = activeWeekIndex > 0;
+  const canNext = activeWeekIndex < weeks.length - 1;
+
+  const selectedEntry = selectedWeek ? byWeek.get(selectedWeek.startDate) : undefined;
+  const selectedAutomatic = selectedWeek ? scienceByWeek.get(selectedWeek.startDate) : undefined;
+  const closed = Boolean(selectedWeek && selectedWeek.teachingDays === 0 && !selectedAutomatic);
 
   function openWeek(week: PlanWeek) {
     const entry = byWeek.get(week.startDate);
@@ -49,10 +131,12 @@ export function AnnualPlan({ classes, calendar, calendarSupportState, entries, o
     const automaticTopic = automatic?.items.map((item) => `${item.title} — ${item.hours} saat`).join("\n") ?? "";
     setEntryDraft({ week, topic: entry?.topic ?? automaticTopic, note: entry?.note ?? "", completed: entry?.completed ?? false });
   }
+
   function saveWeek() {
     if (!entryDraft || !selectedClassId) return;
     onEntry(selectedClassId, entryDraft.week.startDate, { topic: entryDraft.topic, note: entryDraft.note, completed: entryDraft.completed });
-    setEntryDraft(null); onNotify("Haftalık plan kaydedildi");
+    setEntryDraft(null);
+    onNotify("Haftalık plan kaydedildi");
   }
 
   return <>
@@ -64,32 +148,117 @@ export function AnnualPlan({ classes, calendar, calendarSupportState, entries, o
         {sciencePlan && <div className="science-plan-rule"><strong>{sciencePlan.grade}. Sınıf Fen Bilimleri</strong><span>{sciencePlan.grade === 5 ? "Haftada 4 saat · 4 saat laboratuvar güvenliği + 136 saat öğrenme çıktıları" : sciencePlan.grade === 8 ? "Haftada 4 saat · 132 saat kazanım + 8 saat mühendislik / proje" : "Haftada 4 saat · 138 saat resmî program + 2 saat öğretmen planlama"}</span><small>Toplam 140 saat · 1. dönem {sciencePlan.firstTermHours} saat · 2. dönem {sciencePlan.secondTermHours} saat</small></div>}
         <dl><div><dt>Planlanan</dt><dd>{planned}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>Tamamlanan</dt><dd>{completed}/{sciencePlan ? sciencePlan.weeks.length : teachable.length}</dd></div><div><dt>{sciencePlan ? "Ders saati" : "İş günü"}</dt><dd>{sciencePlan ? sciencePlan.totalHours : teachable.reduce((sum, week) => sum + week.teachingDays, 0)}</dd></div></dl>
       </section>
-      <div className="plan-controls">
+
+      <div className="plan-controls single-control">
         <label><span>Sınıf</span><select value={selectedClassId} onChange={(event) => setClassId(event.target.value)}>{classes.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-        <label><span>Göster</span><select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}><option value="all">Tüm haftalar</option><option value="planned">Planlanan</option><option value="completed">Tamamlanan</option><option value="empty">Konu girilmeyen</option></select></label>
       </div>
-      <div className="calendar-note"><strong>{fullDate.format(asDate(calendar.startDate))} – {fullDate.format(asDate(calendar.endDate))}</strong><span>Başlangıç, bitiş ve tatil dönemleri iş takviminden hesaplanır.</span></div>
-      <section className="week-list" aria-label={`${selectedClass?.name} yıllık planı`}>
-        {visible.map((week) => {
-          const entry = byWeek.get(week.startDate); const automatic = scienceByWeek.get(week.startDate); const closed = week.teachingDays === 0 && !automatic;
-          return <article className={`week-row ${closed ? "week-closed" : ""} ${entry?.completed ? "week-completed" : ""} ${isHistorical ? "plan-historical" : ""}`} key={week.startDate}>
-            <button type="button" onClick={() => !closed && !isHistorical && openWeek(week)} disabled={closed || isHistorical}>
-              <span className="week-number">{String(week.number).padStart(2, "0")}</span>
-              <span className="week-copy"><small>{shortDate.format(asDate(week.startDate))} – {shortDate.format(asDate(week.endDate))} · {week.teachingDays} iş günü{automatic ? ` · ${automatic.term}. dönem` : ""}</small>{closed ? <strong>{week.breakTitles.join(" · ") || "Ders yapılmayan hafta"}</strong> : entry?.topic ? <strong className="week-manual-topic">{entry.topic}</strong> : automatic ? <ScienceWeekItems items={automatic.items} /> : <strong>Konu ekleyin</strong>}{entry?.note && <em>{entry.note}</em>}</span>
-              <span className="week-state">{closed ? "Tatil" : isHistorical ? "Geçmiş kayıt" : entry?.completed ? "✓ Tamam" : entry?.topic ? "Planlandı" : automatic ? "Varsayılan" : "+ Ekle"}</span>
-            </button>
-          </article>;
-        })}
-        {!visible.length && <div className="plan-empty"><strong>Bu filtrede hafta yok</strong><p>Başka bir görünüm seçebilirsiniz.</p></div>}
-      </section>
+
+      <nav className="week-navigator" aria-label="Hafta navigasyonu">
+        <button
+          type="button"
+          className="week-nav-button"
+          onClick={() => setUserSelectedIndex(getPreviousWeekIndex(activeWeekIndex))}
+          disabled={!canPrev}
+          aria-label="Önceki hafta"
+        >
+          ‹
+        </button>
+        <div className="week-nav-info">
+          <strong className="week-nav-title">
+            {selectedWeek ? `${selectedWeek.number}. HAFTA · ${formatWeekDateRange(selectedWeek.startDate, getWeekDisplayEndDate(selectedWeek))}` : "—"}
+          </strong>
+          <span className="week-nav-meta">
+            {closed
+              ? (selectedWeek?.breakTitles.join(" · ") || "Ders yapılmayan hafta")
+              : selectedWeek
+              ? `${selectedWeek.teachingDays} iş günü${selectedAutomatic ? ` · ${selectedAutomatic.term}. Dönem` : ""}${selectedEntry?.completed ? " · ✓ Tamamlandı" : ""}`
+              : ""}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="week-nav-button"
+          onClick={() => setUserSelectedIndex(getNextWeekIndex(activeWeekIndex, weeks.length))}
+          disabled={!canNext}
+          aria-label="Sonraki hafta"
+        >
+          ›
+        </button>
+      </nav>
+
+      {selectedWeek && (
+        <section className="single-week-view" aria-label={`${selectedClass?.name} ${selectedWeek.number}. hafta planı`}>
+          {closed ? (
+            <div className="plan-week-card week-closed-card">
+              <span className="week-closed-badge">Tatil / Ders Yapılmayan Dönem</span>
+              <strong>{selectedWeek.breakTitles.join(" · ") || "Ders yapılmayan hafta"}</strong>
+              <p>{fullDate.format(asDate(selectedWeek.startDate))} – {fullDate.format(asDate(selectedWeek.endDate))} · 0 iş günü</p>
+            </div>
+          ) : selectedAutomatic ? (
+            <div className="plan-week-card">
+              <ScienceDetailCards items={selectedAutomatic.items} className={selectedClass?.name ?? "—"} week={selectedWeek} />
+              {(selectedEntry?.topic || selectedEntry?.note || selectedEntry?.completed) && (
+                <div className="week-manual-overlay">
+                  <strong>Manuel plan / öğretmen kaydı</strong>
+                  {selectedEntry.completed && <span className="week-completed-badge">✓ Bu hafta tamamlandı</span>}
+                  {selectedEntry.topic && <p className="week-manual-topic-text"><strong>Özel Konu:</strong> {selectedEntry.topic}</p>}
+                  {selectedEntry.note && <p className="week-manual-note-text"><strong>Öğretmen Notu:</strong> {selectedEntry.note}</p>}
+                </div>
+              )}
+              <div className="week-card-actions">
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={() => !closed && !isHistorical && openWeek(selectedWeek)}
+                  disabled={closed || isHistorical}
+                >
+                  {isHistorical ? "Geçmiş kayıt" : selectedEntry?.topic || selectedEntry?.note ? "Öğretmen Notunu / Planı Düzenle" : "+ Not / Manuel Plan Ekle"}
+                </button>
+              </div>
+            </div>
+          ) : selectedEntry?.topic ? (
+            <div className="plan-week-card manual-only-card">
+              <div className="manual-card-header">
+                <span className="kicker">MANUEL PLAN</span>
+                <strong className="week-manual-topic">{selectedEntry.topic}</strong>
+                {selectedEntry.completed && <span className="week-completed-badge">✓ Bu hafta tamamlandı</span>}
+              </div>
+              {selectedEntry.note && <p className="week-manual-note-text"><strong>Öğretmen Notu:</strong> {selectedEntry.note}</p>}
+              <p className="week-card-meta">{selectedWeek.teachingDays} iş günü · {fullDate.format(asDate(selectedWeek.startDate))} – {fullDate.format(asDate(selectedWeek.endDate))}</p>
+              <div className="week-card-actions">
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={() => !closed && !isHistorical && openWeek(selectedWeek)}
+                  disabled={closed || isHistorical}
+                >
+                  {isHistorical ? "Geçmiş kayıt" : "Planı Düzenle"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="plan-week-card empty-week-card">
+              <div className="empty-week-info">
+                <strong>Bu hafta için konu girilmedi</strong>
+                <p>{selectedWeek.teachingDays} iş günü · Bu sınıf için özel konu veya kazanım planı ekleyebilirsiniz.</p>
+              </div>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => !closed && !isHistorical && openWeek(selectedWeek)}
+                disabled={closed || isHistorical}
+              >
+                {isHistorical ? "Geçmiş kayıt" : "+ Konu / Not Ekle"} <span>→</span>
+              </button>
+            </div>
+          )}
+        </section>
+      )}
     </>}
+
     {calendarOpen && <CalendarSheet value={calendar} onClose={() => setCalendarOpen(false)} onSave={(next) => { onCalendar(next); setCalendarOpen(false); onNotify("İş takvimi güncellendi"); }} />}
     {entryDraft && <Sheet title={`${entryDraft.week.number}. hafta planı`} onClose={() => setEntryDraft(null)}><div className="week-form"><p>{fullDate.format(asDate(entryDraft.week.startDate))} – {fullDate.format(asDate(entryDraft.week.endDate))} · {entryDraft.week.teachingDays} iş günü</p>{scienceByWeek.get(entryDraft.week.startDate) && <ScienceDetailCards items={scienceByWeek.get(entryDraft.week.startDate)!.items} className={selectedClass?.name ?? "—"} week={entryDraft.week} />}<div className="manual-plan-editor"><strong>Manuel plan / öğretmen kaydı</strong><small>Buradaki değişiklik otomatik planı silmez; bu hafta için manuel görünüm olarak saklanır.</small></div><label>Konu / kazanım<textarea data-autofocus rows={3} value={entryDraft.topic} onChange={(event) => setEntryDraft({ ...entryDraft, topic: event.target.value })} placeholder="Bu hafta işlenecek konu" /></label><label>Öğretmen notu<textarea rows={3} value={entryDraft.note} onChange={(event) => setEntryDraft({ ...entryDraft, note: event.target.value })} placeholder="İsteğe bağlı not" /></label><label className="complete-check"><input type="checkbox" checked={entryDraft.completed} onChange={(event) => setEntryDraft({ ...entryDraft, completed: event.target.checked })} /> Bu hafta tamamlandı</label><button className="primary-action" type="button" onClick={saveWeek}>Haftayı kaydet <span>→</span></button></div></Sheet>}
   </>;
-}
-
-function ScienceWeekItems({ items }: { items: SciencePlanItem[] }) {
-  return <span className="science-week-items">{items.map((item, index) => <span key={`${item.unit}-${item.outcomeCode ?? item.title}-${index}`}><strong>{item.title}</strong>{item.outcomeCodes && item.outcomeCodes.length > 1 && <small>{item.outcomeCodes.join(" · ")}</small>}<b>{item.hours} saat</b>{item.badge && <em>{item.badge}</em>}</span>)}</span>;
 }
 
 export function ScienceDetailCards({ items, className, week }: { items: SciencePlanItem[]; className: string; week: PlanWeek }) {
