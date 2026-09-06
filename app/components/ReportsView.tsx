@@ -26,6 +26,90 @@ import {
 } from "../lib/reports";
 import { getStatusPresentation } from "../lib/quick-check";
 import { ReportBarChart, ReportLineChart } from "./report-charts";
+import {
+  generateStudentRecommendations,
+  generateClassGeneralRecommendations,
+  RECOMMENDATION_SEVERITY_LABELS,
+  RECOMMENDATION_CATEGORY_LABELS,
+  type ReportRecommendation,
+  type StudentRecommendationReport,
+  type ClassGeneralRecommendationReport,
+} from "../lib/report-recommendations";
+
+interface RecommendationsSectionProps {
+  title: string;
+  subtitle?: string;
+  summary: string[];
+  recommendations: ReportRecommendation[];
+}
+
+function RecommendationsSection({
+  title,
+  subtitle,
+  summary,
+  recommendations,
+}: RecommendationsSectionProps) {
+  return (
+    <div className="reports-recommendations-section" role="region" aria-label={title}>
+      <div className="section-subheading">
+        <div>
+          <h3>{title}</h3>
+          {subtitle && <p className="section-subdesc">{subtitle}</p>}
+        </div>
+        <span className="section-count">{recommendations.length} Öneri</span>
+      </div>
+
+      {summary.length > 0 && (
+        <div className="recommendations-summary-box">
+          {summary.map((item, idx) => (
+            <p key={idx} className="recommendations-summary-line">
+              {item}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {recommendations.length > 0 ? (
+        <div className="recommendations-grid">
+          {recommendations.map((rec) => (
+            <div
+              key={rec.id}
+              className={`recommendation-card severity-${rec.severity}`}
+              role="article"
+              aria-label={`${rec.title} - ${RECOMMENDATION_SEVERITY_LABELS[rec.severity]}`}
+            >
+              <div className="recommendation-header">
+                <span className="recommendation-title">{rec.title}</span>
+                <div className="recommendation-badges">
+                  <span className={`recommendation-category-pill category-${rec.category}`}>
+                    {RECOMMENDATION_CATEGORY_LABELS[rec.category]}
+                  </span>
+                  <span className={`recommendation-severity-pill severity-${rec.severity}`}>
+                    {RECOMMENDATION_SEVERITY_LABELS[rec.severity]}
+                  </span>
+                </div>
+              </div>
+
+              <p className="recommendation-message">{rec.message}</p>
+
+              {rec.evidence.length > 0 && (
+                <div className="recommendation-evidence-list">
+                  {rec.evidence.map((ev, evIdx) => (
+                    <span key={evIdx} className="recommendation-evidence-pill">
+                      {ev}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="reports-empty-note">Bu dönem için ek bir öneri bulunmuyor.</p>
+      )}
+    </div>
+  );
+}
 
 export type ReportTab = "general" | "classes" | "students" | "sessions";
 export type ReportRangePreset = "current_week" | "last_4_weeks" | "term" | "year";
@@ -152,6 +236,12 @@ export function ReportsView({
     });
   }, [selectedClass, sessions, reportRange, calendar]);
 
+  // Sınıf Genel Değerlendirme ve Öneriler (saf motor)
+  const classGeneralRecommendations = useMemo<ClassGeneralRecommendationReport | null>(() => {
+    if (!generalReport) return null;
+    return generateClassGeneralRecommendations(generalReport);
+  }, [generalReport]);
+
   // Öğrenci Raporu Hesaplaması (saf motor)
   const studentReport = useMemo<StudentReportCoreDTO | null>(() => {
     if (!selectedClass || !selectedStudent) return null;
@@ -160,6 +250,12 @@ export function ReportsView({
       calendar,
     });
   }, [selectedStudent, selectedClass, sessions, reportRange, calendar]);
+
+  // Öğrenci Değerlendirme ve Öneriler (saf motor)
+  const studentRecommendations = useMemo<StudentRecommendationReport | null>(() => {
+    if (!studentReport) return null;
+    return generateStudentRecommendations(studentReport);
+  }, [studentReport]);
 
   // Sınıf Öğrenci Karşılaştırma Raporu (saf motor)
   const comparisonReport = useMemo<ClassComparisonReportDTO | null>(() => {
@@ -654,6 +750,16 @@ export function ReportsView({
                                 </div>
                               )}
                             </div>
+
+                            {/* Genel Değerlendirme ve Öneriler (RAPOR-11) */}
+                            {classGeneralRecommendations && (
+                              <RecommendationsSection
+                                title="Genel Değerlendirme ve Öneriler"
+                                subtitle="Sınıf düzeyinde gözlenen hazırlık ve kontrol kayıtlarına dayalı öneriler."
+                                summary={classGeneralRecommendations.summary}
+                                recommendations={classGeneralRecommendations.recommendations}
+                              />
+                            )}
                           </>
                         )}
                       </div>
@@ -1013,7 +1119,17 @@ export function ReportsView({
                         </p>
                       </div>
 
-                      {/* 4. Haftalık Kontrol Geçmişi */}
+                      {/* 4. Değerlendirme ve Öneriler (RAPOR-11) */}
+                      {studentRecommendations && (
+                        <RecommendationsSection
+                          title="Değerlendirme ve Öneriler"
+                          subtitle="Öğrencinin kontrol kayıtlarına dayalı çalışma ve hazırlık önerileri."
+                          summary={studentRecommendations.summary}
+                          recommendations={studentRecommendations.recommendations}
+                        />
+                      )}
+
+                      {/* 5. Haftalık Kontrol Geçmişi */}
                       <div className="reports-weekly-section">
                         <div className="section-subheading">
                           <h3>Haftalık Kontrol Geçmişi</h3>
