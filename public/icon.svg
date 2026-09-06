@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="112" fill="#17664d"/>
-  <rect x="76" y="76" width="360" height="360" rx="64" fill="#20231f"/>
-  <path d="M76 140 C76 76 76 76 140 76 L372 76 C436 76 436 76 436 140 L436 372 C436 436 436 436 372 436 L140 436 C96 436 76 416 76 372 Z" fill="#20231f"/>
+  <rect width="512" height="512" rx="112" fill="#3F5FCE"/>
+  <rect x="76" y="76" width="360" height="360" rx="64" fill="#172033"/>
+  <path d="M76 140 C76 76 76 76 140 76 L372 76 C436 76 436 76 436 140 L436 372 C436 436 436 436 372 436 L140 436 C96 436 76 416 76 372 Z" fill="#172033"/>
   <!-- Compass star / Rota emblem -->
-  <circle cx="256" cy="256" r="110" fill="#f6f5f0" opacity="0.08"/>
-  <circle cx="256" cy="256" r="85" stroke="#17664d" stroke-width="8" fill="none"/>
+  <circle cx="256" cy="256" r="110" fill="#F6F7FA" opacity="0.08"/>
+  <circle cx="256" cy="256" r="85" stroke="#3F5FCE" stroke-width="8" fill="none"/>
   <!-- Monogram text SR -->
-  <text x="256" y="295" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="140" fill="#f6f5f0" text-anchor="middle" letter-spacing="-6">SR</text>
-  <circle cx="342" cy="180" r="14" fill="#a66b13"/>
+  <text x="256" y="295" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="140" fill="#FFFFFF" text-anchor="middle" letter-spacing="-6">SR</text>
+  <circle cx="342" cy="180" r="14" fill="#F06B5B"/>
 </svg>

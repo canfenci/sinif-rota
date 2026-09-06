@@ -14,8 +14,8 @@ test("A. Web App Manifest exists, parses as valid JSON, and has standalone confi
   assert.equal(manifest.short_name, "Sınıf Rota");
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.start_url, "/");
-  assert.equal(manifest.background_color, "#f6f5f0");
-  assert.equal(manifest.theme_color, "#17664d");
+  assert.equal(manifest.background_color, "#F6F7FA");
+  assert.equal(manifest.theme_color, "#3F5FCE");
   assert.equal(manifest.lang, "tr");
   assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 3, "Manifest must have at least 3 icons");
 });
