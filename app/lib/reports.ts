@@ -205,6 +205,47 @@ export interface ClassComparisonReportDTO {
   rows: ClassComparisonStudentRow[];
 }
 
+/**
+ * Sınıf genel haftalık trend satırı DTO'su.
+ * Öğrenci kimliği veya bireysel durum bilgisi kesinlikle içermez.
+ */
+export interface ClassGeneralWeeklyTrend {
+  weekStart: string;
+  weekNumber?: number;
+  typeScores: Record<CheckType, number | null>;
+  observedAbsenceCount: number;
+  sessionCount: number;
+}
+
+/**
+ * Öğrenci isimleri içermeyen, sınıf grubuyla paylaşılabilecek aggregate sınıf genel raporu DTO'su.
+ *
+ * Gizlilik Sözleşmesi:
+ * Bu DTO ve alt nesneleri ASLA studentId, studentName, studentNumber, öğrenci listesi
+ * veya bireysel katılım notu taşımaz.
+ */
+export interface ClassGeneralReportDTO {
+  classId: string;
+  className: string;
+  range: ReportRange;
+  activeStudentCount: number;
+  typeMetrics: Record<
+    CheckType,
+    {
+      score: number | null;
+      evaluatedCount: number;
+      absentCount: number;
+    }
+  >;
+  totalControlSessionCount: number;
+  totalObservedAbsenceCount: number;
+  dataCoverage: {
+    studentsWithSufficientData: number;
+    studentsWithInsufficientData: number;
+  };
+  weeklyTrend: ClassGeneralWeeklyTrend[];
+}
+
 export type ComparisonSortField =
   | "name"
   | "number"
@@ -1023,4 +1064,124 @@ export function sortComparisonRows(
     }
     return a.studentNumber - b.studentNumber;
   });
+}
+
+/**
+ * Bir sınıf için öğrenci isimleri ve bireysel kimlik bilgileri içermeyen
+ * aggregate ClassGeneralReportDTO hesaplar.
+ *
+ * Gizlilik Sözleşmesi:
+ * DTO ve alt nesneleri ASLA studentId, studentName, studentNumber, öğrenci nesnesi/listesi
+ * veya bireysel katılım notu taşımaz.
+ *
+ * Girdi nesneleri kesinlikle mutate edilmez.
+ */
+export function calculateClassGeneralReport(
+  schoolClass: SchoolClass,
+  sessions: CheckSession[],
+  options?: { range?: ReportRange; calendar?: WorkCalendar }
+): ClassGeneralReportDTO {
+  let resolvedRange: ReportRange;
+  if (options?.range?.fromWeekStart && options?.range?.toWeekStart) {
+    resolvedRange = options.range;
+  } else if (options?.range?.fromWeekStart || options?.range?.toWeekStart) {
+    resolvedRange = {
+      fromWeekStart: options.range.fromWeekStart ?? options.range.toWeekStart,
+      toWeekStart: options.range.toWeekStart ?? options.range.fromWeekStart,
+    };
+  } else {
+    const sessionWeekStarts = sessions
+      .filter((s) => s.classId === schoolClass.id)
+      .map((s) => resolveEffectiveWeekStart(s, options?.calendar))
+      .sort();
+
+    if (sessionWeekStarts.length > 0) {
+      resolvedRange = {
+        fromWeekStart: sessionWeekStarts[0],
+        toWeekStart: sessionWeekStarts[sessionWeekStarts.length - 1],
+      };
+    } else if (options?.calendar && isValidWorkCalendar(options.calendar)) {
+      const planWeeks = buildPlanWeeks(options.calendar);
+      resolvedRange = {
+        fromWeekStart: planWeeks[0]?.startDate ?? resolveSessionWeekStart(new Date().toISOString(), options.calendar),
+        toWeekStart: planWeeks[planWeeks.length - 1]?.startDate ?? resolveSessionWeekStart(new Date().toISOString(), options.calendar),
+      };
+    } else {
+      const currentWeek = resolveSessionWeekStart(new Date().toISOString(), options?.calendar);
+      resolvedRange = {
+        fromWeekStart: currentWeek,
+        toWeekStart: currentWeek,
+      };
+    }
+  }
+
+  const effectiveOptions = { ...options, range: resolvedRange };
+
+  // Reusing authoritative calculateClassReportCore
+  const classReport = calculateClassReportCore(schoolClass, sessions, effectiveOptions);
+
+  const typeMetrics = {} as Record<
+    CheckType,
+    {
+      score: number | null;
+      evaluatedCount: number;
+      absentCount: number;
+    }
+  >;
+
+  for (const type of ALL_CHECK_TYPES) {
+    const breakdown = classReport.typeAverages[type];
+    typeMetrics[type] = {
+      score: breakdown?.score !== null && breakdown?.score !== undefined ? roundScore(breakdown.score, 0) : null,
+      evaluatedCount: breakdown?.evaluatedCount ?? 0,
+      absentCount: breakdown?.absent ?? 0,
+    };
+  }
+
+  const totalObservedAbsenceCount = ALL_CHECK_TYPES.reduce(
+    (sum, t) => sum + typeMetrics[t].absentCount,
+    0
+  );
+
+  const validCalendar = options?.calendar && isValidWorkCalendar(options.calendar) ? options.calendar : undefined;
+  const planWeeks = validCalendar ? buildPlanWeeks(validCalendar) : [];
+
+  // weeklySummaries is already sorted ascending by weekStart (oldest to newest)
+  const weeklyTrend: ClassGeneralWeeklyTrend[] = classReport.weeklySummaries.map((summary) => {
+    const planWeek = planWeeks.find((w) => w.startDate === summary.weekStart);
+    const typeScores = {} as Record<CheckType, number | null>;
+
+    for (const type of ALL_CHECK_TYPES) {
+      const breakdown = summary.typeBreakdowns[type];
+      typeScores[type] =
+        breakdown?.score !== null && breakdown?.score !== undefined
+          ? roundScore(breakdown.score, 0)
+          : null;
+    }
+
+    return {
+      weekStart: summary.weekStart,
+      weekNumber: planWeek?.number,
+      typeScores,
+      observedAbsenceCount: summary.observedAbsenceCount,
+      sessionCount: summary.sessionCount,
+    };
+  });
+
+  const activeStudentCount = schoolClass.students.filter((s) => s.active !== false).length;
+
+  return {
+    classId: schoolClass.id,
+    className: schoolClass.name,
+    range: resolvedRange,
+    activeStudentCount,
+    typeMetrics,
+    totalControlSessionCount: classReport.totalSessions,
+    totalObservedAbsenceCount,
+    dataCoverage: {
+      studentsWithSufficientData: classReport.studentsWithSufficientData,
+      studentsWithInsufficientData: classReport.studentsWithInsufficientData,
+    },
+    weeklyTrend,
+  };
 }

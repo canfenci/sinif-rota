@@ -237,3 +237,27 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .status-pill.status-sufficient{background:rgba(27,122,90,.08);color:var(--green)}
 .status-pill.status-partial_preview{background:rgba(232,185,79,.18);color:#92400e}
 .status-pill.status-insufficient{background:rgba(102,112,133,.1);color:var(--muted)}
+
+/* Class General Report (RAPOR-09) */
+.reports-general-section{margin-top:24px;border-top:1px solid var(--ink);padding-top:18px}
+.general-report-card{margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--white);display:grid;gap:18px}
+.general-report-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.general-report-header h4{margin:2px 0 0;font-size:20px;font-weight:700;color:var(--ink)}
+.general-header-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.general-active-pill{display:inline-flex;align-items:center;padding:4px 8px;border-radius:4px;background:rgba(63,95,206,.08);color:var(--primary);font-size:12px;font-weight:600}
+.general-trend-section{display:grid;gap:12px;margin-top:6px}
+.trend-section-header{display:flex;align-items:center;justify-content:space-between}
+.trend-section-header h5{margin:0;font-size:14px;font-weight:700;color:var(--ink)}
+.general-trend-list{display:grid;gap:10px}
+.general-trend-row{padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--paper);display:grid;gap:10px}
+.trend-row-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.trend-week-title{font-size:13px;font-weight:700;color:var(--ink)}
+.trend-row-meta{display:flex;align-items:center;gap:8px}
+.trend-session-count{font-size:12px;color:var(--muted);font-weight:600}
+.trend-absence-badge{display:inline-flex;align-items:center;padding:2px 6px;border-radius:4px;background:rgba(62,90,122,.12);color:var(--blue);font-size:11px;font-weight:600}
+.trend-type-scores{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media (max-width:480px){.trend-type-scores{grid-template-columns:repeat(2,1fr)}}
+.trend-score-item{padding:6px 8px;border-radius:4px;background:var(--white);border:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
+.trend-score-item.empty{opacity:.6}
+.trend-score-label{font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);text-transform:uppercase}
+.trend-score-value{font-size:13px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}

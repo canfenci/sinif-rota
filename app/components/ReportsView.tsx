@@ -8,6 +8,7 @@ import { formatWeekDateRange } from "./AnnualPlan";
 import {
   ALL_CHECK_TYPES,
   calculateClassComparisonReport,
+  calculateClassGeneralReport,
   calculateClassReportCore,
   calculateStudentReportCore,
   COVERAGE_STATUS_LABELS,
@@ -17,6 +18,7 @@ import {
   roundScore,
   sortComparisonRows,
   type ClassComparisonReportDTO,
+  type ClassGeneralReportDTO,
   type ClassReportCoreDTO,
   type ComparisonSortField,
   type SortDirection,
@@ -135,6 +137,15 @@ export function ReportsView({
   const classReport = useMemo<ClassReportCoreDTO | null>(() => {
     if (!selectedClass) return null;
     return calculateClassReportCore(selectedClass, sessions, {
+      range: reportRange,
+      calendar,
+    });
+  }, [selectedClass, sessions, reportRange, calendar]);
+
+  // Sınıf Genel Raporu (öğrenci kimliği içermeyen aggregate motor)
+  const generalReport = useMemo<ClassGeneralReportDTO | null>(() => {
+    if (!selectedClass) return null;
+    return calculateClassGeneralReport(selectedClass, sessions, {
       range: reportRange,
       calendar,
     });
@@ -500,6 +511,147 @@ export function ReportsView({
                       </div>
                     </>
                   ) : null}
+
+                  {/* 2. Sınıf Genel Raporu Bölümü (Öğrenci isimleri içermeyen aggregate görünüm) */}
+                  {generalReport && (
+                    <div className="reports-general-section">
+                      <div className="section-subheading">
+                        <div>
+                          <h3>Sınıf Genel Raporu</h3>
+                          <p className="section-subdesc">Öğrenci isimleri içermeyen sınıf genel görünümü.</p>
+                        </div>
+                        <span className="section-count">{generalReport.activeStudentCount} Aktif Öğrenci</span>
+                      </div>
+
+                      <div className="general-report-card">
+                        <div className="general-report-header">
+                          <div>
+                            <p className="kicker">SINIF GENEL RAPORU</p>
+                            <h4>{generalReport.className}</h4>
+                          </div>
+                          <div className="general-header-meta">
+                            <span className="reports-range-tag">{rangeDisplayLabel}</span>
+                            <span className="general-active-pill">{generalReport.activeStudentCount} aktif öğrenci</span>
+                          </div>
+                        </div>
+
+                        {generalReport.totalControlSessionCount === 0 ? (
+                          <div className="reports-empty-range" role="status">
+                            <strong>Seçilen dönemde bu sınıf için henüz kontrol kaydı bulunmuyor.</strong>
+                            <p>Hızlı Kontrol bölümünden bu sınıf için yeni bir kontrol oturumu başlatabilirsiniz.</p>
+                          </div>
+                        ) : (
+                          <>
+                            {/* 4 Ana Metrik Kartları */}
+                            <div className="reports-metrics-grid" role="region" aria-label="Sınıf genel kontrol türleri ortalamaları">
+                              {ALL_CHECK_TYPES.map((type) => {
+                                const metric = generalReport.typeMetrics[type];
+                                const score = metric.score;
+                                const title = type === "Ödev" ? "Ödev Yapma" : `${type} Getirme`;
+
+                                return (
+                                  <div key={type} className="reports-metric-card">
+                                    <span className="metric-card-title">{title}</span>
+                                    <div
+                                      className="metric-card-score"
+                                      aria-label={score !== null ? `${title}: %${score}` : `${title}: Veri yok`}
+                                    >
+                                      {score !== null ? `%${score}` : "—"}
+                                    </div>
+                                    <div className="metric-card-sub">
+                                      {metric.evaluatedCount > 0 ? (
+                                        <span>{metric.evaluatedCount} değerlendirme</span>
+                                      ) : (
+                                        <span className="metric-no-data">Veri yok</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Kontrollerde Gelmedi ve Veri Kapsamı */}
+                            <div className="reports-aux-grid">
+                              <div className="reports-aux-card absence-card">
+                                <span className="aux-card-kicker">KONTROLLERDE GELMEDİ</span>
+                                <div className="aux-card-main">
+                                  <strong className="aux-card-value">
+                                    {generalReport.totalObservedAbsenceCount} kayıt
+                                  </strong>
+                                </div>
+                                <p className="aux-card-explanation">
+                                  Yalnız ders içi kontrollerde &ldquo;Gelmedi&rdquo; olarak işaretlenen kayıtların toplamını gösterir.
+                                </p>
+                              </div>
+
+                              <div className="reports-aux-card sufficiency-card">
+                                <span className="aux-card-kicker">VERİ KAPSAMI</span>
+                                <div className="aux-card-main">
+                                  <strong className="aux-card-value">
+                                    {generalReport.dataCoverage.studentsWithSufficientData} yeterli / {generalReport.dataCoverage.studentsWithInsufficientData} yetersiz
+                                  </strong>
+                                </div>
+                                <p className="aux-card-explanation">
+                                  {generalReport.dataCoverage.studentsWithSufficientData} öğrencide yeterli veri, {generalReport.dataCoverage.studentsWithInsufficientData} öğrencide yetersiz veri.
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Haftalık Sınıf Trend Verisi */}
+                            <div className="general-trend-section">
+                              <div className="trend-section-header">
+                                <h5>Haftalık Sınıf Trendi</h5>
+                                <span className="section-count">{generalReport.weeklyTrend.length} Hafta</span>
+                              </div>
+
+                              {generalReport.weeklyTrend.length === 0 ? (
+                                <p className="reports-empty-note">Bu dönem aralığında haftalık trend verisi bulunamadı.</p>
+                              ) : (
+                                <div className="general-trend-list">
+                                  {generalReport.weeklyTrend.map((trend) => {
+                                    const weekPlan = planWeeks.find((w) => w.startDate === trend.weekStart);
+                                    const weekTitle = weekPlan
+                                      ? `${weekPlan.number}. Hafta (${formatWeekDateRange(weekPlan.startDate, weekPlan.endDate)})`
+                                      : `${trend.weekStart} Haftası`;
+
+                                    return (
+                                      <div key={trend.weekStart} className="general-trend-row">
+                                        <div className="trend-row-header">
+                                          <strong className="trend-week-title">{weekTitle}</strong>
+                                          <div className="trend-row-meta">
+                                            <span className="trend-session-count">{trend.sessionCount} kontrol</span>
+                                            {trend.observedAbsenceCount > 0 && (
+                                              <span className="trend-absence-badge">Gelmedi: {trend.observedAbsenceCount}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="trend-type-scores">
+                                          {ALL_CHECK_TYPES.map((type) => {
+                                            const sc = trend.typeScores[type];
+                                            return (
+                                              <div key={type} className={`trend-score-item ${sc === null ? "empty" : ""}`}>
+                                                <span className="trend-score-label">{type}</span>
+                                                <strong
+                                                  className="trend-score-value"
+                                                  aria-label={sc !== null ? `${type}: %${sc}` : `${type}: Veri yok`}
+                                                >
+                                                  {sc !== null ? `%${sc}` : "—"}
+                                                </strong>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* 3. Öğrenci Karşılaştırması Bölümü */}
                   {comparisonReport && (
