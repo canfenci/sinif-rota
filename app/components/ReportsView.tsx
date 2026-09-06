@@ -25,6 +25,7 @@ import {
   type StudentReportCoreDTO,
 } from "../lib/reports";
 import { getStatusPresentation } from "../lib/quick-check";
+import { ReportBarChart, ReportLineChart } from "./report-charts";
 
 export type ReportTab = "general" | "classes" | "students" | "sessions";
 export type ReportRangePreset = "current_week" | "last_4_weeks" | "term" | "year";
@@ -570,6 +571,9 @@ export function ReportsView({
                               })}
                             </div>
 
+                            {/* 4 Metrik Başarı Çubuğu Grafiği (RAPOR-10) */}
+                            <ReportBarChart typeMetrics={generalReport.typeMetrics} />
+
                             {/* Kontrollerde Gelmedi ve Veri Kapsamı */}
                             <div className="reports-aux-grid">
                               <div className="reports-aux-card absence-card">
@@ -603,6 +607,9 @@ export function ReportsView({
                                 <h5>Haftalık Sınıf Trendi</h5>
                                 <span className="section-count">{generalReport.weeklyTrend.length} Hafta</span>
                               </div>
+
+                              {/* Haftalık Trend Çizgi Grafiği (RAPOR-10) */}
+                              <ReportLineChart weeklyTrend={generalReport.weeklyTrend} />
 
                               {generalReport.weeklyTrend.length === 0 ? (
                                 <p className="reports-empty-note">Bu dönem aralığında haftalık trend verisi bulunamadı.</p>
