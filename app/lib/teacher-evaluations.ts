@@ -156,6 +156,19 @@ export function getTeacherEvaluation(
 }
 
 /**
+ * Print/presentation katmanı için salt evaluation text okur.
+ * Saf modül fonksiyonudur; React memo kurallarından etkilenmez.
+ */
+export function findEvaluationText(
+  evaluations: TeacherEvaluation[] | undefined,
+  identity: TeacherEvaluationIdentity | null
+): string | null {
+  if (!identity) return null;
+  const id = buildTeacherEvaluationId(identity);
+  return (evaluations ?? []).find((entry) => entry.id === id)?.text ?? null;
+}
+
+/**
  * Upsert: aynı identity için ikinci record oluşamaz.
  * - Mevcut id: text + updatedAt güncellenir, createdAt korunur.
  * - Yeni: deterministik id ile createdAt/updatedAt atanır.

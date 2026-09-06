@@ -572,10 +572,15 @@ test("31. no chart dependency: harici veya dahili grafik kütüphanesi kullanıl
   assert.doesNotMatch(reportsViewSource, /victory/i);
 });
 
-// 32. no PDF
-test("32. no PDF: PDF dışa aktarma kütüphanesi veya butonu bulunmaz", () => {
+// 32. no PDF generation (RAPOR-13A: "Yazdır / PDF" yazdırma affordance'ı hariç)
+test("32. no PDF: PDF kütüphanesi veya gerçek PDF üretimi bulunmaz", () => {
   assert.doesNotMatch(reportsViewSource, /jspdf/i);
-  assert.doesNotMatch(reportsViewSource, /pdf/i);
+  assert.doesNotMatch(reportsViewSource, /react-pdf|pdf-lib|html2canvas/i);
+  assert.doesNotMatch(reportsViewSource, /new Blob|new File\(|URL\.createObjectURL/i);
+  const withoutPrintAffordances = reportsViewSource
+    .replace(/Yazdır \/ PDF/g, "")
+    .replace(/PDF olarak kaydedebilirsiniz/g, "");
+  assert.doesNotMatch(withoutPrintAffordances, /pdf/i);
 });
 
 // 33. no AI

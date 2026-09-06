@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CheckSession, SchoolClass, TeacherEvaluation, WorkCalendar } from "../lib/types";
 import {
   buildTeacherEvaluationId,
+  findEvaluationText,
   getTeacherEvaluation,
   TEACHER_EVALUATION_TEXT_MAX_LENGTH,
   type TeacherEvaluationIdentity,
@@ -33,6 +34,13 @@ import {
 } from "../lib/reports";
 import { getStatusPresentation } from "../lib/quick-check";
 import { ReportBarChart, ReportLineChart } from "./report-charts";
+import {
+  buildClassComparisonPrintSnapshot,
+  buildClassGeneralPrintSnapshot,
+  buildStudentPrintSnapshot,
+  ReportPrintJobView,
+  type ReportPrintJob,
+} from "./report-print";
 import {
   generateStudentRecommendations,
   generateClassGeneralRecommendations,
@@ -369,10 +377,11 @@ export function ReportsView({
     return resolveReportRange(selectedRangePreset, calendar);
   }, [selectedRangePreset, calendar]);
 
-  const evaluationRange =
-    reportRange.fromWeekStart && reportRange.toWeekStart
+  const evaluationRange = useMemo(() => {
+    return reportRange.fromWeekStart && reportRange.toWeekStart
       ? { fromWeekStart: reportRange.fromWeekStart, toWeekStart: reportRange.toWeekStart }
       : null;
+  }, [reportRange]);
 
   const studentEvaluationIdentity: TeacherEvaluationIdentity | null =
     evaluationRange && selectedClass && selectedStudent
@@ -403,13 +412,19 @@ export function ReportsView({
     ? getTeacherEvaluation(teacherEvaluations, classGeneralEvaluationIdentity)
     : null;
 
+  const studentEvalText = findEvaluationText(teacherEvaluations, studentEvaluationIdentity);
+  const classGeneralEvalText = findEvaluationText(teacherEvaluations, classGeneralEvaluationIdentity);
+
   const handleEvaluationSave = (identity: TeacherEvaluationIdentity, text: string) => {
+    setPrintNotice("");
     onUpsertTeacherEvaluation?.({ ...identity, text });
   };
 
   const handleEvaluationDelete = (identity: TeacherEvaluationIdentity) => {
+    setPrintNotice("");
     onDeleteTeacherEvaluation?.(identity);
   };
+
 
   // Range bilgisi metni
   const rangeDisplayLabel = useMemo(() => {
@@ -510,6 +525,119 @@ export function ReportsView({
       setCompSortField(field);
       setCompSortDir("asc");
     }
+  };
+
+  const [printNotice, setPrintNotice] = useState("");
+  const [printKind, setPrintKind] = useState<"student" | "comparison" | "class-general" | null>(null);
+  const [printTicket, setPrintTicket] = useState(0);
+  const [printStamp, setPrintStamp] = useState("");
+
+  const printWeekTitles = useMemo(() => {
+    const titles: Record<string, string> = {};
+    for (const week of planWeeks) {
+      titles[week.startDate] = `${week.number}. Hafta · ${formatWeekDateRange(week.startDate, week.endDate)}`;
+    }
+    return titles;
+  }, [planWeeks]);
+
+  /**
+   * Print snapshot: hazır DTO'lardan türetilmiş salt veri (hesap yok).
+   * Bilinçli olarak useMemo'suz hesaplanır: ucuz nesne birleştirmedir ve
+   * ticket yalnızca print isteğinde değişir. window.print() dialogu açıkken
+   * JS durakladığı için seçim değişimi araya giremez; dialog kapanınca
+   * afterprint cleanup çalışır. generatedAt ticket başına tazedir.
+   */
+  const printSnapshot: ReportPrintJob | null = (() => {
+    if (printTicket === 0 || !printKind) return null;
+    const generatedAt = printStamp;
+    if (printKind === "student") {
+      if (!studentReport || !selectedStudent || !selectedClass || !studentRecommendations) return null;
+      return buildStudentPrintSnapshot({
+        studentName: selectedStudent.name,
+        studentNumber: selectedStudent.number,
+        className: selectedClass.name,
+        rangeLabel: rangeDisplayLabel,
+        report: studentReport,
+        recommendations: studentRecommendations,
+        evaluationText: studentEvalText,
+        weekTitles: printWeekTitles,
+        generatedAt,
+      });
+    }
+    if (printKind === "comparison") {
+      if (!comparisonReport || !selectedClass) return null;
+      return buildClassComparisonPrintSnapshot({
+        className: selectedClass.name,
+        rangeLabel: rangeDisplayLabel,
+        report: comparisonReport,
+        generatedAt,
+      });
+    }
+    if (!generalReport || !selectedClass || !classGeneralRecommendations) return null;
+    return buildClassGeneralPrintSnapshot({
+      className: selectedClass.name,
+      rangeLabel: rangeDisplayLabel,
+      report: generalReport,
+      recommendations: classGeneralRecommendations,
+      evaluationText: classGeneralEvalText,
+      weekTitles: printWeekTitles,
+      generatedAt,
+    });
+  })();
+
+  // Print lifecycle: snapshot commit edildikten sonra yazdır,
+  // dialog kapandıktan sonra cleanup yap. Popup/new window yok.
+  // Snapshot her renderda yeniden üretilir; printedTicketRef aynı ticket
+  // için tekrar yazdırmayı engeller.
+  const printedTicketRef = useRef(0);
+  useEffect(() => {
+    if (printTicket === 0 || !printSnapshot || typeof window === "undefined") return;
+    if (printedTicketRef.current === printTicket) return;
+    printedTicketRef.current = printTicket;
+    window.print();
+  }, [printTicket, printSnapshot]);
+
+  useEffect(() => {
+    if (printTicket === 0 || !printSnapshot || typeof window === "undefined") return;
+    const handleAfterPrint = () => {
+      printedTicketRef.current = 0;
+      setPrintKind(null);
+      setPrintTicket(0);
+    };
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => window.removeEventListener("afterprint", handleAfterPrint);
+  }, [printTicket, printSnapshot]);
+
+  /**
+   * Dirty teacher evaluation varken print engellenir: yalnız persisted
+   * veri basılır, autosave yapılmaz, nötr uyarı gösterilir.
+   */
+  const requestPrint = (kind: "student" | "comparison" | "class-general"): void => {
+    if (evalDirtyRef.current) {
+      setPrintNotice(
+        "Öğretmen değerlendirmenizde kaydedilmemiş değişiklikler var. Yazdırmadan önce kaydedin veya değişiklikleri geri alın."
+      );
+      return;
+    }
+    setPrintNotice("");
+    setPrintKind(kind);
+    setPrintStamp(new Date().toISOString());
+    setPrintTicket((ticket) => ticket + 1);
+  };
+
+  const handlePrintStudent = () => {
+    if (!studentReport || !selectedStudent || !selectedClass || !studentRecommendations) return;
+    requestPrint("student");
+  };
+
+  const handlePrintComparison = () => {
+    if (!comparisonReport || !selectedClass) return;
+    requestPrint("comparison");
+  };
+
+  const handlePrintClassGeneral = () => {
+    if (!generalReport || !selectedClass || !classGeneralRecommendations) return;
+    requestPrint("class-general");
   };
 
 
@@ -861,6 +989,24 @@ export function ReportsView({
                           </div>
                         </div>
 
+                        <div className="report-print-action no-print">
+                          <button
+                            type="button"
+                            className="secondary-action"
+                            onClick={handlePrintClassGeneral}
+                            disabled={!generalReport || generalReport.totalControlSessionCount === 0}
+                            aria-label="Sınıf genel raporunu yazdır"
+                          >
+                            Yazdır / PDF
+                          </button>
+                          <p className="report-print-hint">Yazdırma ekranından PDF olarak kaydedebilirsiniz.</p>
+                          {printNotice && (
+                            <p className="report-print-notice" role="status">
+                              {printNotice}
+                            </p>
+                          )}
+                        </div>
+
                         {generalReport.totalControlSessionCount === 0 ? (
                           <div className="reports-empty-range" role="status">
                             <strong>Seçilen dönemde bu sınıf için henüz kontrol kaydı bulunmuyor.</strong>
@@ -1018,6 +1164,24 @@ export function ReportsView({
                           <p className="section-subdesc">Seçili dönemde öğrencilerin kontrol kayıtlarını karşılaştırın.</p>
                         </div>
                         <span className="section-count">{comparisonReport.rows.length} Öğrenci</span>
+                      </div>
+
+                      <div className="report-print-action no-print">
+                        <button
+                          type="button"
+                          className="secondary-action"
+                          onClick={handlePrintComparison}
+                          disabled={!comparisonReport || comparisonReport.rows.length === 0}
+                          aria-label="Sınıf karşılaştırma raporunu yazdır"
+                        >
+                          Yazdır / PDF
+                        </button>
+                        <p className="report-print-hint">Yazdırma ekranından PDF olarak kaydedebilirsiniz.</p>
+                        {printNotice && (
+                          <p className="report-print-notice" role="status">
+                            {printNotice}
+                          </p>
+                        )}
                       </div>
 
                       {comparisonReport.rows.length === 0 ? (
@@ -1278,6 +1442,24 @@ export function ReportsView({
                     <span className="reports-range-tag">{rangeDisplayLabel}</span>
                   </div>
 
+                  <div className="report-print-action no-print">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={handlePrintStudent}
+                      disabled={!studentReport || (studentReport.totalValidCheckCount === 0 && studentReport.totalAbsentCount === 0)}
+                      aria-label="Öğrenci raporunu yazdır"
+                    >
+                      Yazdır / PDF
+                    </button>
+                    <p className="report-print-hint">Yazdırma ekranından PDF olarak kaydedebilirsiniz.</p>
+                    {printNotice && (
+                      <p className="report-print-notice" role="status">
+                        {printNotice}
+                      </p>
+                    )}
+                  </div>
+
                   {/* Eğer seçili aralıkta öğrenciye ait hiç kontrol kaydı yoksa */}
                   {studentReport && studentReport.totalValidCheckCount === 0 && studentReport.totalAbsentCount === 0 ? (
                     <div className="reports-empty-range" role="status">
@@ -1524,6 +1706,11 @@ export function ReportsView({
             </section>
           )}
         </>
+      )}
+      {printSnapshot && (
+        <div className="report-print-root">
+          <ReportPrintJobView job={printSnapshot} />
+        </div>
       )}
     </div>
   );

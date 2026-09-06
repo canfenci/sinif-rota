@@ -407,10 +407,15 @@ test("18. Harici veya dahili chart kütüphanesi import edilmez (saf CSS döküm
   assert.doesNotMatch(reportsViewSource, /victory/i);
 });
 
-// 19. PDF export KULLANILMAZ
-test("19. Bu görevde PDF export butonu veya kütüphanesi yer almaz", () => {
+// 19. PDF export KULLANILMAZ (RAPOR-13A: "Yazdır / PDF" yazdırma affordance'ı hariç)
+test("19. Bu görevde PDF kütüphanesi veya gerçek PDF üretimi yer almaz", () => {
   assert.doesNotMatch(reportsViewSource, /jspdf/i);
-  assert.doesNotMatch(reportsViewSource, /pdf/i);
+  assert.doesNotMatch(reportsViewSource, /react-pdf|pdf-lib|html2canvas/i);
+  assert.doesNotMatch(reportsViewSource, /new Blob|new File\(|URL\.createObjectURL/i);
+  const withoutPrintAffordances = reportsViewSource
+    .replace(/Yazdır \/ PDF/g, "")
+    .replace(/PDF olarak kaydedebilirsiniz/g, "");
+  assert.doesNotMatch(withoutPrintAffordances, /pdf/i);
 });
 
 // 20. AI KULLANILMAZ
