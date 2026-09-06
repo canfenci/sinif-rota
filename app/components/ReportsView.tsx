@@ -7,13 +7,19 @@ import { buildPlanWeeks, isValidWorkCalendar } from "../lib/planning/calendar";
 import { formatWeekDateRange } from "./AnnualPlan";
 import {
   ALL_CHECK_TYPES,
+  calculateClassComparisonReport,
   calculateClassReportCore,
   calculateStudentReportCore,
+  COVERAGE_STATUS_LABELS,
   findSemesterBreak,
   PARTICIPATION_COPY,
   resolveReportRange,
   roundScore,
+  sortComparisonRows,
+  type ClassComparisonReportDTO,
   type ClassReportCoreDTO,
+  type ComparisonSortField,
+  type SortDirection,
   type StudentReportCoreDTO,
 } from "../lib/reports";
 import { getStatusPresentation } from "../lib/quick-check";
@@ -142,6 +148,33 @@ export function ReportsView({
       calendar,
     });
   }, [selectedStudent, selectedClass, sessions, reportRange, calendar]);
+
+  // Sınıf Öğrenci Karşılaştırma Raporu (saf motor)
+  const comparisonReport = useMemo<ClassComparisonReportDTO | null>(() => {
+    if (!selectedClass) return null;
+    return calculateClassComparisonReport(selectedClass, sessions, {
+      range: reportRange,
+      calendar,
+    });
+  }, [selectedClass, sessions, reportRange, calendar]);
+
+  const [compSortField, setCompSortField] = useState<ComparisonSortField>("number");
+  const [compSortDir, setCompSortDir] = useState<SortDirection>("asc");
+
+  const sortedComparisonRows = useMemo(() => {
+    if (!comparisonReport) return [];
+    return sortComparisonRows(comparisonReport.rows, compSortField, compSortDir);
+  }, [comparisonReport, compSortField, compSortDir]);
+
+  const handleCompSort = (field: ComparisonSortField) => {
+    if (compSortField === field) {
+      setCompSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setCompSortField(field);
+      setCompSortDir("asc");
+    }
+  };
+
 
   // Toplam istatistik özeti (Genel tab için nötr sayımlar)
   const totalActiveStudents = useMemo(() => {
@@ -467,6 +500,194 @@ export function ReportsView({
                       </div>
                     </>
                   ) : null}
+
+                  {/* 3. Öğrenci Karşılaştırması Bölümü */}
+                  {comparisonReport && (
+                    <div className="reports-comparison-section">
+                      <div className="section-subheading">
+                        <div>
+                          <h3>Öğrenci Karşılaştırması</h3>
+                          <p className="section-subdesc">Seçili dönemde öğrencilerin kontrol kayıtlarını karşılaştırın.</p>
+                        </div>
+                        <span className="section-count">{comparisonReport.rows.length} Öğrenci</span>
+                      </div>
+
+                      {comparisonReport.rows.length === 0 ? (
+                        <div className="reports-empty-prompt" role="status">
+                          <p>Bu sınıfta karşılaştırılabilecek öğrenci bulunmuyor.</p>
+                        </div>
+                      ) : (
+                        <div
+                          className="reports-table-scroll"
+                          role="region"
+                          aria-label="Sınıf öğrenci karşılaştırma tablosu"
+                        >
+                          <table className="reports-comparison-table">
+                            <thead>
+                              <tr>
+                                <th
+                                  scope="col"
+                                  aria-sort={compSortField === "name" ? (compSortDir === "asc" ? "ascending" : "descending") : "none"}
+                                >
+                                  <button
+                                    type="button"
+                                    className="table-sort-btn"
+                                    onClick={() => handleCompSort("name")}
+                                  >
+                                    <span>Öğrenci</span>
+                                    <span className="sort-icon" aria-hidden="true">
+                                      {compSortField === "name" ? (compSortDir === "asc" ? "▲" : "▼") : "↕"}
+                                    </span>
+                                  </button>
+                                </th>
+                                <th
+                                  scope="col"
+                                  aria-sort={compSortField === "number" ? (compSortDir === "asc" ? "ascending" : "descending") : "none"}
+                                >
+                                  <button
+                                    type="button"
+                                    className="table-sort-btn"
+                                    onClick={() => handleCompSort("number")}
+                                  >
+                                    <span>No</span>
+                                    <span className="sort-icon" aria-hidden="true">
+                                      {compSortField === "number" ? (compSortDir === "asc" ? "▲" : "▼") : "↕"}
+                                    </span>
+                                  </button>
+                                </th>
+                                <th
+                                  scope="col"
+                                  aria-sort={compSortField === "Ödev" ? (compSortDir === "asc" ? "ascending" : "descending") : "none"}
+                                >
+                                  <button
+                                    type="button"
+                                    className="table-sort-btn"
+                                    onClick={() => handleCompSort("Ödev")}
+                                  >
+                                    <span>Ödev</span>
+                                    <span className="sort-icon" aria-hidden="true">
+                                      {compSortField === "Ödev" ? (compSortDir === "asc" ? "▲" : "▼") : "↕"}
+                                    </span>
+                                  </button>
+                                </th>
+                                <th
+                                  scope="col"
+                                  aria-sort={compSortField === "Defter" ? (compSortDir === "asc" ? "ascending" : "descending") : "none"}
+                                >
+                                  <button
+                                    type="button"
+                                    className="table-sort-btn"
+                                    onClick={() => handleCompSort("Defter")}
+                                  >
+                                    <span>Defter</span>
+                                    <span className="sort-icon" aria-hidden="true">
+                                      {compSortField === "Defter" ? (compSortDir === "asc" ? "▲" : "▼") : "↕"}
+                                    </span>
+                                  </button>
+                                </th>
+                                <th
+                                  scope="col"
+                                  aria-sort={compSortField === "Kitap" ? (compSortDir === "asc" ? "ascending" : "descending") : "none"}
+                                >
+                                  <button
+                                    type="button"
+                                    className="table-sort-btn"
+                                    onClick={() => handleCompSort("Kitap")}
+                                  >
+                                    <span>Kitap</span>
+                                    <span className="sort-icon" aria-hidden="true">
+                                      {compSortField === "Kitap" ? (compSortDir === "asc" ? "▲" : "▼") : "↕"}
+                                    </span>
+                                  </button>
+                                </th>
+                                <th
+                                  scope="col"
+                                  aria-sort={compSortField === "Materyal" ? (compSortDir === "asc" ? "ascending" : "descending") : "none"}
+                                >
+                                  <button
+                                    type="button"
+                                    className="table-sort-btn"
+                                    onClick={() => handleCompSort("Materyal")}
+                                  >
+                                    <span>Materyal</span>
+                                    <span className="sort-icon" aria-hidden="true">
+                                      {compSortField === "Materyal" ? (compSortDir === "asc" ? "▲" : "▼") : "↕"}
+                                    </span>
+                                  </button>
+                                </th>
+                                <th
+                                  scope="col"
+                                  aria-sort={compSortField === "suggestedScore" ? (compSortDir === "asc" ? "ascending" : "descending") : "none"}
+                                >
+                                  <button
+                                    type="button"
+                                    className="table-sort-btn"
+                                    onClick={() => handleCompSort("suggestedScore")}
+                                  >
+                                    <span>Öneri Notu</span>
+                                    <span className="sort-icon" aria-hidden="true">
+                                      {compSortField === "suggestedScore" ? (compSortDir === "asc" ? "▲" : "▼") : "↕"}
+                                    </span>
+                                  </button>
+                                </th>
+                                <th scope="col">
+                                  <span>Veri Durumu</span>
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sortedComparisonRows.map((row) => (
+                                <tr key={row.studentId} className={row.active ? "" : "row-archived"}>
+                                  <td className="cell-student-name">
+                                    <strong>{row.studentName}</strong>
+                                    {row.active === false && (
+                                      <span className="comparison-archived-tag">Arşivlenmiş</span>
+                                    )}
+                                  </td>
+                                  <td className="cell-student-number">{row.studentNumber}</td>
+                                  <td
+                                    className="cell-score"
+                                    aria-label={row.typeScores["Ödev"] !== null ? `Ödev: %${row.typeScores["Ödev"]}` : "Ödev: Veri yok"}
+                                  >
+                                    {row.typeScores["Ödev"] !== null ? `%${row.typeScores["Ödev"]}` : "—"}
+                                  </td>
+                                  <td
+                                    className="cell-score"
+                                    aria-label={row.typeScores["Defter"] !== null ? `Defter: %${row.typeScores["Defter"]}` : "Defter: Veri yok"}
+                                  >
+                                    {row.typeScores["Defter"] !== null ? `%${row.typeScores["Defter"]}` : "—"}
+                                  </td>
+                                  <td
+                                    className="cell-score"
+                                    aria-label={row.typeScores["Kitap"] !== null ? `Kitap: %${row.typeScores["Kitap"]}` : "Kitap: Veri yok"}
+                                  >
+                                    {row.typeScores["Kitap"] !== null ? `%${row.typeScores["Kitap"]}` : "—"}
+                                  </td>
+                                  <td
+                                    className="cell-score"
+                                    aria-label={row.typeScores["Materyal"] !== null ? `Materyal: %${row.typeScores["Materyal"]}` : "Materyal: Veri yok"}
+                                  >
+                                    {row.typeScores["Materyal"] !== null ? `%${row.typeScores["Materyal"]}` : "—"}
+                                  </td>
+                                  <td
+                                    className="cell-score cell-suggested"
+                                    aria-label={row.suggestedParticipationScore !== null ? `Öneri Notu: ${row.suggestedParticipationScore}` : "Öneri Notu: Veri yok"}
+                                  >
+                                    <strong>{row.suggestedParticipationScore !== null ? row.suggestedParticipationScore : "—"}</strong>
+                                  </td>
+                                  <td className="cell-status">
+                                    <span className={`status-pill status-${row.coverageStatus}`}>
+                                      {COVERAGE_STATUS_LABELS[row.coverageStatus]}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="reports-empty-prompt" role="status">

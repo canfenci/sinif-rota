@@ -212,3 +212,28 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .check-status-badge.status-partial{background:rgba(232,185,79,.18);color:#92400e}
 .check-status-badge.status-missing{background:rgba(217,56,41,.1);color:var(--red)}
 .check-status-badge.status-absent{background:rgba(62,90,122,.12);color:var(--blue)}
+
+/* Class Comparison Report (RAPOR-08) */
+.reports-comparison-section{margin-top:24px;border-top:1px solid var(--ink);padding-top:18px}
+.section-subdesc{margin:3px 0 0;color:var(--muted);font-size:13px;line-height:1.4}
+.reports-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:14px;border:1px solid var(--line);border-radius:7px;background:var(--white)}
+.reports-comparison-table{width:100%;min-width:640px;border-collapse:collapse;font-size:13px;text-align:left}
+.reports-comparison-table th{padding:10px 12px;border-bottom:2px solid var(--line);background:var(--paper);font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.table-sort-btn{display:inline-flex;align-items:center;gap:4px;padding:0;border:0;background:transparent;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}
+.table-sort-btn:hover{color:var(--ink)}
+.sort-icon{font-size:10px;opacity:.7}
+.reports-comparison-table td{padding:12px;border-bottom:1px solid var(--line);color:var(--ink);vertical-align:middle}
+.reports-comparison-table tr:last-child td{border-bottom:0}
+.reports-comparison-table tr:hover td{background:rgba(63,95,206,.02)}
+.reports-comparison-table tr.row-archived td{opacity:.75}
+.cell-student-name{min-width:140px}
+.cell-student-name strong{font-weight:600}
+.comparison-archived-tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;background:rgba(102,112,133,.12);color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase}
+.cell-student-number{font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600;width:50px}
+.cell-score{font-variant-numeric:tabular-nums;text-align:right;width:65px}
+.cell-suggested{color:var(--primary);font-size:14px;font-weight:700}
+.cell-status{text-align:center;width:110px}
+.status-pill{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
+.status-pill.status-sufficient{background:rgba(27,122,90,.08);color:var(--green)}
+.status-pill.status-partial_preview{background:rgba(232,185,79,.18);color:#92400e}
+.status-pill.status-insufficient{background:rgba(102,112,133,.1);color:var(--muted)}

@@ -172,6 +172,52 @@ export interface ClassReportCoreDTO {
 }
 
 /**
+ * Veri yeterliliği durumlarının kullanıcı dostu ve nötr etiketleri.
+ */
+export const COVERAGE_STATUS_LABELS: Record<CoverageStatus, string> = {
+  sufficient: "Yeterli",
+  partial_preview: "Ön İzleme",
+  insufficient: "Yetersiz Veri",
+};
+
+/**
+ * Sınıf karşılaştırma tablosunda tek bir öğrenci satırına ait DTO.
+ */
+export interface ClassComparisonStudentRow {
+  studentId: string;
+  studentNumber: number;
+  studentName: string;
+  active: boolean;
+  typeScores: Record<CheckType, number | null>;
+  evaluatedCounts: Record<CheckType, number>;
+  suggestedParticipationScore: number | null;
+  coverageStatus: CoverageStatus;
+  sufficientData: boolean;
+}
+
+/**
+ * Sınıf içi öğrenci karşılaştırma raporu DTO'su.
+ */
+export interface ClassComparisonReportDTO {
+  classId: string;
+  className: string;
+  range: ReportRange;
+  rows: ClassComparisonStudentRow[];
+}
+
+export type ComparisonSortField =
+  | "name"
+  | "number"
+  | "Ödev"
+  | "Defter"
+  | "Kitap"
+  | "Materyal"
+  | "suggestedScore";
+
+export type SortDirection = "asc" | "desc";
+
+
+/**
  * Belirli bir durum dizisi için TypeBreakdown hesaplar.
  *
  * Puanlama kuralı:
@@ -807,4 +853,174 @@ export function resolveReportRange(
   }
 
   return {};
+}
+
+/**
+ * Seçili sınıf ve aralık için öğretmen içi öğrenci karşılaştırma raporu hesaplar.
+ *
+ * Hesap kaynakları:
+ * Her öğrenci satırı authoritative calculateStudentReportCore(...) fonksiyonundan türetilir.
+ * Yeni bağımsız formül yazılmaz; tamamlanma, kısmi, eksik ve gelmedi kuralları doğrudan yeniden kullanılır.
+ *
+ * Girdi nesneleri kesinlikle mutate edilmez.
+ */
+export function calculateClassComparisonReport(
+  schoolClass: SchoolClass,
+  sessions: CheckSession[],
+  options?: { range?: ReportRange; calendar?: WorkCalendar }
+): ClassComparisonReportDTO {
+  let resolvedRange: ReportRange;
+  if (options?.range?.fromWeekStart && options?.range?.toWeekStart) {
+    resolvedRange = options.range;
+  } else if (options?.range?.fromWeekStart || options?.range?.toWeekStart) {
+    resolvedRange = {
+      fromWeekStart: options.range.fromWeekStart ?? options.range.toWeekStart,
+      toWeekStart: options.range.toWeekStart ?? options.range.fromWeekStart,
+    };
+  } else {
+    // Range belirtilmemişse:
+    // Varsa mevcut sınıf oturumlarından sınırları çöz, yoksa takvimden veya güncel haftadan çöz
+    const sessionWeekStarts = sessions
+      .filter((s) => s.classId === schoolClass.id)
+      .map((s) => resolveEffectiveWeekStart(s, options?.calendar))
+      .sort();
+
+    if (sessionWeekStarts.length > 0) {
+      resolvedRange = {
+        fromWeekStart: sessionWeekStarts[0],
+        toWeekStart: sessionWeekStarts[sessionWeekStarts.length - 1],
+      };
+    } else if (options?.calendar && isValidWorkCalendar(options.calendar)) {
+      const planWeeks = buildPlanWeeks(options.calendar);
+      resolvedRange = {
+        fromWeekStart: planWeeks[0]?.startDate ?? resolveSessionWeekStart(new Date().toISOString(), options.calendar),
+        toWeekStart: planWeeks[planWeeks.length - 1]?.startDate ?? resolveSessionWeekStart(new Date().toISOString(), options.calendar),
+      };
+    } else {
+      const currentWeek = resolveSessionWeekStart(new Date().toISOString(), options?.calendar);
+      resolvedRange = {
+        fromWeekStart: currentWeek,
+        toWeekStart: currentWeek,
+      };
+    }
+  }
+
+  const effectiveOptions = { ...options, range: resolvedRange };
+
+  const rows: ClassComparisonStudentRow[] = schoolClass.students.map((student) => {
+    const studentReport = calculateStudentReportCore(student, schoolClass, sessions, effectiveOptions);
+
+    const typeScores = {} as Record<CheckType, number | null>;
+    const evaluatedCounts = {} as Record<CheckType, number>;
+
+    for (const type of ALL_CHECK_TYPES) {
+      const breakdown = studentReport.breakdowns[type];
+      typeScores[type] = breakdown.score !== null ? roundScore(breakdown.score, 0) : null;
+      evaluatedCounts[type] = breakdown.evaluatedCount;
+    }
+
+    return {
+      studentId: student.id,
+      studentNumber: student.number,
+      studentName: student.name,
+      active: student.active !== false,
+      typeScores,
+      evaluatedCounts,
+      suggestedParticipationScore: studentReport.suggestedParticipationScore,
+      coverageStatus: studentReport.dataSufficiency.coverageStatus,
+      sufficientData: studentReport.dataSufficiency.sufficientData,
+    };
+  });
+
+  const defaultSortedRows = sortComparisonRowsByDefault(rows);
+
+  return {
+    classId: schoolClass.id,
+    className: schoolClass.name,
+    range: resolvedRange,
+    rows: defaultSortedRows,
+  };
+}
+
+/**
+ * Karşılaştırma satırlarını varsayılan düzende sıralar:
+ * 1. Aktif öğrenciler önce, arşivlenmiş (inactive) öğrenciler listenin sonunda
+ * 2. Öğrenci numarası artan (ascending)
+ * 3. Eşit/eksik numara durumunda öğrenci adı alfabetik ('tr')
+ */
+export function sortComparisonRowsByDefault(
+  rows: ClassComparisonStudentRow[]
+): ClassComparisonStudentRow[] {
+  return [...rows].sort((a, b) => {
+    if (a.active !== b.active) {
+      return a.active ? -1 : 1;
+    }
+    if (a.studentNumber !== b.studentNumber) {
+      return a.studentNumber - b.studentNumber;
+    }
+    return a.studentName.localeCompare(b.studentName, "tr");
+  });
+}
+
+/**
+ * Karşılaştırma satırlarını belirtilen alana ve yöne göre sıralar.
+ *
+ * Kural: Null değerler her zaman listenin sonundadır (hem asc hem desc sıralamada).
+ * Eşitlik durumunda öğrenci numarası / adı deterministik tie-breaker olarak kullanılır.
+ */
+export function sortComparisonRows(
+  rows: ClassComparisonStudentRow[],
+  field: ComparisonSortField,
+  direction: SortDirection = "asc"
+): ClassComparisonStudentRow[] {
+  return [...rows].sort((a, b) => {
+    if (field === "name") {
+      const comparison = a.studentName.localeCompare(b.studentName, "tr");
+      if (comparison !== 0) {
+        return direction === "desc" ? -comparison : comparison;
+      }
+      return a.studentNumber - b.studentNumber;
+    }
+
+    if (field === "number") {
+      const comparison = a.studentNumber - b.studentNumber;
+      if (comparison !== 0) {
+        return direction === "desc" ? -comparison : comparison;
+      }
+      return a.studentName.localeCompare(b.studentName, "tr");
+    }
+
+    if (field === "suggestedScore") {
+      const valA = a.suggestedParticipationScore;
+      const valB = b.suggestedParticipationScore;
+
+      if (valA === null && valB === null) {
+        return a.studentNumber - b.studentNumber;
+      }
+      if (valA === null) return 1;
+      if (valB === null) return -1;
+
+      const comparison = valA - valB;
+      if (comparison !== 0) {
+        return direction === "desc" ? -comparison : comparison;
+      }
+      return a.studentNumber - b.studentNumber;
+    }
+
+    // CheckType: "Ödev" | "Defter" | "Kitap" | "Materyal"
+    const valA = a.typeScores[field];
+    const valB = b.typeScores[field];
+
+    if (valA === null && valB === null) {
+      return a.studentNumber - b.studentNumber;
+    }
+    if (valA === null) return 1;
+    if (valB === null) return -1;
+
+    const comparison = valA - valB;
+    if (comparison !== 0) {
+      return direction === "desc" ? -comparison : comparison;
+    }
+    return a.studentNumber - b.studentNumber;
+  });
 }
