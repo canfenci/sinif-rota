@@ -13,6 +13,7 @@ const layoutPath = path.resolve("app/layout.tsx");
 const manifestWeb = JSON.parse(fs.readFileSync(manifestWebPath, "utf8"));
 const manifestJson = JSON.parse(fs.readFileSync(manifestJsonPath, "utf8"));
 const layoutContent = fs.readFileSync(layoutPath, "utf8");
+const pageContent = fs.readFileSync(path.resolve("app/page.tsx"), "utf8");
 
 test("A. Old primary green/cream palette tokens are not used as primary active colors", () => {
   // Ensure old primary green #17664d and cream #f6f5f0 are not in root tokens
@@ -102,4 +103,44 @@ test("L. Annual Plan week navigator and detail cards use the new palette tokens"
 
   // Official source links use primary cobalt
   assert.ok(css.includes(".official-source-link{color:var(--primary);font-size:11px;font-weight:600;text-decoration:underline;display:inline-flex;align-items:center;min-height:28px}"));
+});
+
+test("M. Official outcome description uses main ink color and is not muted", () => {
+  assert.match(css, /\.official-outcome-text\{[^}]*color:var\(--ink\)/);
+  assert.doesNotMatch(css, /\.official-outcome-text\{[^}]*color:var\(--muted\)/);
+});
+
+test("N. Grade identity tokens use the requested non-status colors", () => {
+  assert.ok(css.includes("--grade-5:#279B98"), "Grade 5 token must be turquoise #279B98");
+  assert.ok(css.includes("--grade-6:#E8B94F"), "Grade 6 token must be sunshine yellow #E8B94F");
+  assert.ok(css.includes("--grade-7:#4F8B63"), "Grade 7 token must be grade green #4F8B63");
+  assert.ok(css.includes("--grade-8:#F06B5B"), "Grade 8 token must be coral #F06B5B");
+});
+
+test("O. Grade identity tokens are not aliases for semantic success or danger", () => {
+  assert.doesNotMatch(css, /--grade-[5-8]:var\(--(?:success|danger|green|red)\)/);
+  assert.ok(css.includes("--success:#1B7A5A"), "Quick Check success token remains semantic green");
+  assert.ok(css.includes("--danger:#D93829"), "Danger token remains semantic red");
+  assert.ok(css.includes("--grade-7:#4F8B63"), "Grade 7 identity green is separate from --success");
+  assert.ok(css.includes("--grade-8:#F06B5B"), "Grade 8 identity coral is separate from --danger");
+});
+
+test("P. Home class cards use grade accents while preserving click navigation", () => {
+  assert.ok(pageContent.includes('className={`class-row home-class-card${gradeClass}`}'));
+  assert.ok(pageContent.includes("onClick={() => onClass(item.id)}"));
+  assert.ok(css.includes(".home-class-list{border-top:0;display:grid;gap:10px}"));
+  assert.ok(css.includes("border-left:5px solid var(--grade-accent)"));
+  assert.ok(css.includes(".home-class-card.grade-5{--grade-accent:var(--grade-5);--grade-tint:var(--grade-5-tint)}"));
+  assert.ok(css.includes(".home-class-card.grade-6{--grade-accent:var(--grade-6);--grade-tint:var(--grade-6-tint)}"));
+  assert.ok(css.includes(".home-class-card.grade-7{--grade-accent:var(--grade-7);--grade-tint:var(--grade-7-tint)}"));
+  assert.ok(css.includes(".home-class-card.grade-8{--grade-accent:var(--grade-8);--grade-tint:var(--grade-8-tint)}"));
+});
+
+test("Q. Grade 6 yellow badge keeps dark ink text for contrast", () => {
+  assert.ok(css.includes(".home-class-card.grade-6 .class-grade-badge{color:var(--ink)}"));
+});
+
+test("R. Visual polish keeps curriculum modules out of homepage changes", () => {
+  assert.doesNotMatch(pageContent, /from "\.\/lib\/curriculum/);
+  assert.doesNotMatch(pageContent, /officialCurriculumRegistry/);
 });
