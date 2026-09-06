@@ -12,6 +12,34 @@ export const ALL_CHECK_TYPES: readonly CheckType[] = [
 ] as const;
 
 /**
+ * Derse Katılım Öneri Notu hesaplamasında kullanılan eşik değerleri.
+ * Bunlar Sınıf Rota ürün kurallarıdır; resmi mevzuat veya MEB standardı iddiası taşımaz.
+ */
+export const PARTICIPATION_THRESHOLDS = {
+  MIN_EVALUATED_TYPES_FOR_SCORE: 3,
+  MIN_VALID_CHECKS_PER_INCLUDED_TYPE: 2,
+  MIN_TOTAL_VALID_CHECKS_FOR_SCORE: 8,
+} as const;
+
+export const MIN_EVALUATED_TYPES_FOR_SCORE =
+  PARTICIPATION_THRESHOLDS.MIN_EVALUATED_TYPES_FOR_SCORE;
+export const MIN_VALID_CHECKS_PER_INCLUDED_TYPE =
+  PARTICIPATION_THRESHOLDS.MIN_VALID_CHECKS_PER_INCLUDED_TYPE;
+export const MIN_TOTAL_VALID_CHECKS_FOR_SCORE =
+  PARTICIPATION_THRESHOLDS.MIN_TOTAL_VALID_CHECKS_FOR_SCORE;
+
+/**
+ * Derse Katılım Öneri Notu için canonical başlık ve nötr açıklama metinleri.
+ */
+export const PARTICIPATION_COPY = {
+  TITLE: "Derse Katılım Öneri Notu",
+  DESCRIPTION:
+    "Derse katılım değerlendirmesi; kayıt altına alınan ödev yapma, defter, kitap ve materyal getirme sıklıklarına göre oluşturulmuştur.",
+  DISCLAIMER:
+    "Bu puan öğretmenin değerlendirmesine yardımcı olmak amacıyla oluşturulan öneri puandır.",
+} as const;
+
+/**
  * Tek bir kontrol türü için durum sayıları ve puan dağılımı.
  */
 export interface TypeBreakdown {
@@ -34,6 +62,30 @@ export interface ReportRange {
 }
 
 /**
+ * Veri yeterliliği kapsam durumu:
+ * - insufficient: 0 geçerli gözlem, değerlendirme başlatılamaz.
+ * - partial_preview: Bir miktar gözlem var ancak öneri notu üretmek için eşikler yetersiz.
+ * - sufficient: Tüm eşikler sağlandı, öneri notu güvenle üretilebilir.
+ */
+export type CoverageStatus =
+  | "insufficient"
+  | "partial_preview"
+  | "sufficient";
+
+/**
+ * Derse Katılım Öneri Notu veri yeterliliği modeli.
+ */
+export interface DataSufficiency {
+  sufficientData: boolean;
+  coverageStatus: CoverageStatus;
+  evaluatedTypeCount: number;
+  totalValidCheckCount: number;
+  perTypeValidCheckCount: Record<CheckType, number>;
+  missingTypes: CheckType[];
+  coverageNote: string;
+}
+
+/**
  * Bireysel öğrenci için saf çekirdek rapor DTO'su.
  */
 export interface StudentReportCoreDTO {
@@ -48,6 +100,8 @@ export interface StudentReportCoreDTO {
   observedAbsenceCount: number;
   typeCoverage: number;
   participationRawAverage: number | null;
+  dataSufficiency: DataSufficiency;
+  suggestedParticipationScore: number | null;
 }
 
 /**
@@ -73,6 +127,8 @@ export interface ClassReportCoreDTO {
   typeAverages: Record<CheckType, TypeBreakdown>;
   totalSessions: number;
   weeklySummaries: WeeklyClassSummaryDTO[];
+  studentsWithSufficientData: number;
+  studentsWithInsufficientData: number;
 }
 
 /**
@@ -162,6 +218,79 @@ export function isWeekInRange(weekStart: string, range?: ReportRange): boolean {
 }
 
 /**
+ * Verilen kontrol türü dağılımlarına göre DataSufficiency hesaplar.
+ *
+ * Yeterlilik Kriterleri:
+ * 1. evaluatedTypeCount >= MIN_EVALUATED_TYPES_FOR_SCORE (en az 3 tür)
+ * 2. Hesaba katılan her türde evaluatedCount >= MIN_VALID_CHECKS_PER_INCLUDED_TYPE (en az 2 gözlem)
+ * 3. totalValidCheckCount >= MIN_TOTAL_VALID_CHECKS_FOR_SCORE (en az 8 toplam gözlem)
+ */
+export function calculateDataSufficiency(
+  breakdowns: Record<CheckType, TypeBreakdown>
+): DataSufficiency {
+  const perTypeValidCheckCount = {} as Record<CheckType, number>;
+  const missingTypes: CheckType[] = [];
+
+  for (const type of ALL_CHECK_TYPES) {
+    const count = breakdowns[type]?.evaluatedCount ?? 0;
+    perTypeValidCheckCount[type] = count;
+    if (count === 0) {
+      missingTypes.push(type);
+    }
+  }
+
+  const evaluatedTypes = ALL_CHECK_TYPES.filter(
+    (t) => perTypeValidCheckCount[t] > 0
+  );
+  const evaluatedTypeCount = evaluatedTypes.length;
+
+  const totalValidCheckCount = ALL_CHECK_TYPES.reduce(
+    (sum, t) => sum + perTypeValidCheckCount[t],
+    0
+  );
+
+  const hasMinTypes = evaluatedTypeCount >= MIN_EVALUATED_TYPES_FOR_SCORE;
+  const allIncludedTypesMeetMin =
+    hasMinTypes &&
+    evaluatedTypes.every(
+      (t) => perTypeValidCheckCount[t] >= MIN_VALID_CHECKS_PER_INCLUDED_TYPE
+    );
+  const hasMinTotal = totalValidCheckCount >= MIN_TOTAL_VALID_CHECKS_FOR_SCORE;
+
+  const sufficientData = hasMinTypes && allIncludedTypesMeetMin && hasMinTotal;
+
+  let coverageStatus: CoverageStatus;
+  let coverageNote: string;
+
+  if (sufficientData) {
+    coverageStatus = "sufficient";
+    coverageNote = "Değerlendirme için yeterli veri mevcut.";
+  } else if (totalValidCheckCount === 0) {
+    coverageStatus = "insufficient";
+    coverageNote = "Henüz değerlendirme için yeterli kontrol kaydı bulunmuyor.";
+  } else {
+    coverageStatus = "partial_preview";
+    if (!hasMinTypes) {
+      coverageNote = "Öneri notu için daha fazla kontrol türünde veri gerekiyor.";
+    } else if (!allIncludedTypesMeetMin) {
+      coverageNote = "Bazı kontrol türlerinde yeterli sayıda gözlem bulunmuyor.";
+    } else {
+      coverageNote = "Öneri notu için toplam gözlem sayısı henüz yeterli düzeye ulaşmadı.";
+    }
+  }
+
+  return {
+    sufficientData,
+    coverageStatus,
+    evaluatedTypeCount,
+    totalValidCheckCount,
+    perTypeValidCheckCount,
+    missingTypes,
+    coverageNote,
+  };
+}
+
+/**
  * Tek bir öğrenci için saf StudentReportCoreDTO hesaplar.
  *
  * Girdi nesneleri kesinlikle mutate edilmez.
@@ -210,6 +339,13 @@ export function calculateStudentReportCore(
       ? validScores.reduce((sum, s) => sum + s, 0) / validScores.length
       : null;
 
+  const dataSufficiency = calculateDataSufficiency(breakdowns);
+
+  const suggestedParticipationScore =
+    dataSufficiency.sufficientData && participationRawAverage !== null
+      ? Math.round(participationRawAverage)
+      : null;
+
   return {
     studentId: student.id,
     studentNumber: student.number,
@@ -222,6 +358,8 @@ export function calculateStudentReportCore(
     observedAbsenceCount: totalAbsentCount,
     typeCoverage,
     participationRawAverage,
+    dataSufficiency,
+    suggestedParticipationScore,
   };
 }
 
@@ -332,6 +470,18 @@ export function calculateClassReportCore(
 
   const weeklySummaries = calculateWeeklyClassSummaries(schoolClass, sessions, options);
 
+  let studentsWithSufficientData = 0;
+  let studentsWithInsufficientData = 0;
+
+  for (const student of schoolClass.students) {
+    const studentReport = calculateStudentReportCore(student, schoolClass, sessions, options);
+    if (studentReport.dataSufficiency.sufficientData) {
+      studentsWithSufficientData++;
+    } else {
+      studentsWithInsufficientData++;
+    }
+  }
+
   return {
     classId: schoolClass.id,
     className: schoolClass.name,
@@ -340,5 +490,7 @@ export function calculateClassReportCore(
     typeAverages,
     totalSessions: matchingSessions.length,
     weeklySummaries,
+    studentsWithSufficientData,
+    studentsWithInsufficientData,
   };
 }
