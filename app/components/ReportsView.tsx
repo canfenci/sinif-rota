@@ -5,6 +5,14 @@ import type { CheckSession, SchoolClass, WorkCalendar } from "../lib/types";
 import { resolveSessionWeekStart } from "../lib/session-week";
 import { buildPlanWeeks, isValidWorkCalendar } from "../lib/planning/calendar";
 import { formatWeekDateRange } from "./AnnualPlan";
+import {
+  ALL_CHECK_TYPES,
+  calculateClassReportCore,
+  findSemesterBreak,
+  resolveReportRange,
+  roundScore,
+  type ClassReportCoreDTO,
+} from "../lib/reports";
 
 export type ReportTab = "general" | "classes" | "students" | "sessions";
 export type ReportRangePreset = "current_week" | "last_4_weeks" | "term" | "year";
@@ -72,6 +80,11 @@ export function ReportsView({
     setSelectedStudentId("");
   };
 
+  // Rapor aralık nesnesi (fromWeekStart, toWeekStart)
+  const reportRange = useMemo(() => {
+    return resolveReportRange(selectedRangePreset, calendar);
+  }, [selectedRangePreset, calendar]);
+
   // Range bilgisi metni
   const rangeDisplayLabel = useMemo(() => {
     if (selectedRangePreset === "current_week") {
@@ -80,14 +93,42 @@ export function ReportsView({
       }
       return `${currentWeekStart} Haftası`;
     }
+    if (selectedRangePreset === "last_4_weeks" && planWeeks.length > 0) {
+      const fromW = planWeeks.find((w) => w.startDate === reportRange.fromWeekStart);
+      const toW = planWeeks.find((w) => w.startDate === reportRange.toWeekStart);
+      if (fromW && toW) {
+        return `Son 4 Hafta (${fromW.number}.–${toW.number}. Hafta)`;
+      }
+      return "Son 4 Hafta";
+    }
+    if (selectedRangePreset === "term") {
+      const semesterBreak = findSemesterBreak(calendar);
+      const isTerm1 = !semesterBreak || currentWeekStart < semesterBreak.startDate;
+      return isTerm1 ? "1. Dönem" : "2. Dönem";
+    }
+    if (selectedRangePreset === "year") {
+      if (calendar?.schoolYear) {
+        return `${calendar.schoolYear} Eğitim Öğretim Yılı`;
+      }
+      return REPORT_RANGE_LABELS.year;
+    }
     return REPORT_RANGE_LABELS[selectedRangePreset];
-  }, [selectedRangePreset, currentPlanWeek, currentWeekStart]);
+  }, [selectedRangePreset, currentPlanWeek, currentWeekStart, planWeeks, reportRange, calendar]);
 
   // Seçili sınıfa ait oturumlar
   const classSessions = useMemo(() => {
     if (!selectedClassId) return sessions;
     return sessions.filter((s) => s.classId === selectedClassId);
   }, [sessions, selectedClassId]);
+
+  // Sınıf Raporu Hesaplaması (saf motor)
+  const classReport = useMemo<ClassReportCoreDTO | null>(() => {
+    if (!selectedClass) return null;
+    return calculateClassReportCore(selectedClass, sessions, {
+      range: reportRange,
+      calendar,
+    });
+  }, [selectedClass, sessions, reportRange, calendar]);
 
   // Toplam istatistik özeti (Genel tab için nötr sayımlar)
   const totalActiveStudents = useMemo(() => {
@@ -253,7 +294,7 @@ export function ReportsView({
                 </label>
               </div>
 
-              {selectedClass && (
+              {selectedClass ? (
                 <div className="reports-class-card">
                   <div className="reports-class-header">
                     <div>
@@ -265,15 +306,158 @@ export function ReportsView({
 
                   <div className="reports-meta-chips">
                     <span>{selectedClass.students.filter((s) => s.active !== false).length} Aktif Öğrenci</span>
-                    <span>{classSessions.length} Kontrol Oturumu</span>
+                    <span>{classReport?.totalSessions ?? 0} Kontrol Oturumu</span>
                   </div>
 
-                  <div className="reports-placeholder-card inside-class">
-                    <h3>Sınıf Değerlendirme Özeti</h3>
-                    <p className="reports-card-desc">
-                      Detaylı sınıf kontrol dağılımı ve haftalık özetler sonraki aşamada bu alanda yer alacaktır.
-                    </p>
-                  </div>
+                  {/* Eğer seçili aralıkta hiç kontrol yoksa */}
+                  {classReport && classReport.totalSessions === 0 ? (
+                    <div className="reports-empty-range" role="status">
+                      <strong>Seçilen dönemde bu sınıf için henüz kontrol kaydı bulunmuyor.</strong>
+                      <p>Hızlı Kontrol bölümünden bu sınıf için yeni bir kontrol oturumu başlatabilirsiniz.</p>
+                    </div>
+                  ) : classReport ? (
+                    <>
+                      {/* 4 Ana Kontrol Türü Metrik Kartları */}
+                      <div className="reports-metrics-grid" role="region" aria-label="Kontrol türleri ortalamaları">
+                        {ALL_CHECK_TYPES.map((type) => {
+                          const breakdown = classReport.typeAverages[type];
+                          const score = breakdown?.score !== null && breakdown?.score !== undefined
+                            ? roundScore(breakdown.score, 0)
+                            : null;
+                          const evaluatedCount = breakdown?.evaluatedCount ?? 0;
+                          const title = type === "Ödev" ? "Ödev Yapma" : `${type} Getirme`;
+
+                          return (
+                            <div key={type} className="reports-metric-card">
+                              <span className="metric-card-title">{title}</span>
+                              <div
+                                className="metric-card-score"
+                                aria-label={score !== null ? `${title}: %${score}` : `${title}: Veri yok`}
+                              >
+                                {score !== null ? `%${score}` : "—"}
+                              </div>
+                              <div className="metric-card-sub">
+                                {evaluatedCount > 0 ? (
+                                  <span>{evaluatedCount} değerlendirme</span>
+                                ) : (
+                                  <span className="metric-no-data">Veri yok</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Gözlemlenen Yokluk ve Veri Yeterliliği İki Sütunlu / Kartlı Bölüm */}
+                      <div className="reports-aux-grid">
+                        {/* Gözlemlenen Yokluk Kartı */}
+                        <div className="reports-aux-card absence-card">
+                          <span className="aux-card-kicker">KONTROLLERDE GELMEDİ</span>
+                          <div className="aux-card-main">
+                            <strong className="aux-card-value">
+                              {ALL_CHECK_TYPES.reduce((sum, t) => sum + classReport.typeAverages[t].absent, 0)} kayıt
+                            </strong>
+                          </div>
+                          <p className="aux-card-explanation">
+                            Yalnız ders içi kontrollerde &ldquo;Gelmedi&rdquo; olarak işaretlenen kayıtları gösterir.
+                          </p>
+                        </div>
+
+                        {/* Veri Yeterliliği Özeti Kartı */}
+                        <div className="reports-aux-card sufficiency-card">
+                          <span className="aux-card-kicker">DERSE KATILIM VERİ YETERLİLİĞİ</span>
+                          <div className="aux-card-main">
+                            <strong className="aux-card-value">
+                              {classReport.studentsWithSufficientData} yeterli / {classReport.studentsWithInsufficientData} yetersiz
+                            </strong>
+                          </div>
+                          <p className="aux-card-explanation">
+                            Derse Katılım Öneri Notu için {classReport.studentsWithSufficientData} öğrencide yeterli veri, {classReport.studentsWithInsufficientData} öğrencide henüz yetersiz veri.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Haftalık Özetler Listesi */}
+                      <div className="reports-weekly-section">
+                        <div className="section-subheading">
+                          <h3>Haftalık Kontrol Dökümü</h3>
+                          <span className="section-count">{classReport.weeklySummaries.length} Hafta</span>
+                        </div>
+
+                        {classReport.weeklySummaries.length === 0 ? (
+                          <p className="reports-empty-note">Bu dönem aralığında haftalık kayıt bulunamadı.</p>
+                        ) : (
+                          <div className="weekly-summary-list">
+                            {classReport.weeklySummaries.map((summary) => {
+                              const weekPlan = planWeeks.find((w) => w.startDate === summary.weekStart);
+                              const weekTitle = weekPlan
+                                ? `${weekPlan.number}. Hafta · ${formatWeekDateRange(weekPlan.startDate, weekPlan.endDate)}`
+                                : `${summary.weekStart} Haftası`;
+
+                              return (
+                                <div key={summary.weekStart} className="weekly-summary-card">
+                                  <div className="weekly-card-header">
+                                    <strong className="weekly-card-title">{weekTitle}</strong>
+                                    <span className="weekly-session-count">{summary.sessionCount} Oturum</span>
+                                  </div>
+
+                                  {/* Hafta içi tür skorları */}
+                                  <div className="weekly-type-pills">
+                                    {ALL_CHECK_TYPES.map((type) => {
+                                      const breakdown = summary.typeBreakdowns[type];
+                                      const sc = breakdown?.score !== null && breakdown?.score !== undefined
+                                        ? roundScore(breakdown.score, 0)
+                                        : null;
+                                      return (
+                                        <span key={type} className={`weekly-type-pill ${sc === null ? "empty" : ""}`}>
+                                          <small>{type}:</small>
+                                          <strong>{sc !== null ? `%${sc}` : "—"}</strong>
+                                        </span>
+                                      );
+                                    })}
+                                    {summary.observedAbsenceCount > 0 && (
+                                      <span className="weekly-type-pill absence-pill">
+                                        <small>Gelmedi:</small>
+                                        <strong>{summary.observedAbsenceCount}</strong>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Ziyaret / Giriş Bilgileri */}
+                                  <div className="weekly-visits-row">
+                                    {summary.visitSummaries && summary.visitSummaries.length > 0 ? (
+                                      summary.visitSummaries.map((v, vIdx) => {
+                                        if (v.visitIndex !== undefined) {
+                                          return (
+                                            <span key={vIdx} className="weekly-visit-badge">
+                                              {v.visitIndex}. Giriş · {v.sessionTypes.join(", ")}
+                                            </span>
+                                          );
+                                        }
+                                        return (
+                                          <span key={vIdx} className="weekly-visit-badge legacy-badge">
+                                            Eski kayıtlar: giriş bilgisi yok ({v.sessionTypes.join(", ")})
+                                          </span>
+                                        );
+                                      })
+                                    ) : summary.hasLegacyVisits ? (
+                                      <span className="weekly-visit-badge legacy-badge">
+                                        Eski kayıtlar: giriş bilgisi yok
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="reports-empty-prompt" role="status">
+                  <p>Raporu görüntülemek için bir sınıf seçin.</p>
                 </div>
               )}
             </section>

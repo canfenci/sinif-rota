@@ -1,5 +1,6 @@
 import type { CheckSession, CheckStatus, CheckType, SchoolClass, Student, WorkCalendar } from "./types";
 import { resolveSessionWeekStart } from "./session-week";
+import { buildPlanWeeks, isValidWorkCalendar } from "./planning/calendar";
 
 /**
  * Desteklenen tüm kontrol türlerinin sabit listesi.
@@ -105,6 +106,15 @@ export interface StudentReportCoreDTO {
 }
 
 /**
+ * Tek bir ziyaret (giriş) için oturum türleri ve oturum sayısı özeti.
+ */
+export interface WeeklyVisitSummary {
+  visitIndex?: number;
+  sessionTypes: CheckType[];
+  sessionCount: number;
+}
+
+/**
  * Sınıf bazında haftalık özet DTO'su.
  */
 export interface WeeklyClassSummaryDTO {
@@ -114,6 +124,7 @@ export interface WeeklyClassSummaryDTO {
   observedAbsenceCount: number;
   visitIndices: number[];
   hasLegacyVisits: boolean;
+  visitSummaries: WeeklyVisitSummary[];
 }
 
 /**
@@ -421,6 +432,37 @@ export function calculateWeeklyClassSummaries(
 
     const hasLegacyVisits = weekSessions.some((s) => s.visitIndex === undefined);
 
+    const visitSummaries: WeeklyVisitSummary[] = [];
+    for (const vIdx of visitIndices) {
+      const vSessions = weekSessions.filter((s) => s.visitIndex === vIdx);
+      const sessionTypes: CheckType[] = [];
+      for (const s of vSessions) {
+        if (!sessionTypes.includes(s.type)) {
+          sessionTypes.push(s.type);
+        }
+      }
+      visitSummaries.push({
+        visitIndex: vIdx,
+        sessionTypes,
+        sessionCount: vSessions.length,
+      });
+    }
+
+    if (hasLegacyVisits) {
+      const legacySessions = weekSessions.filter((s) => s.visitIndex === undefined);
+      const sessionTypes: CheckType[] = [];
+      for (const s of legacySessions) {
+        if (!sessionTypes.includes(s.type)) {
+          sessionTypes.push(s.type);
+        }
+      }
+      visitSummaries.push({
+        visitIndex: undefined,
+        sessionTypes,
+        sessionCount: legacySessions.length,
+      });
+    }
+
     return {
       weekStart,
       sessionCount: weekSessions.length,
@@ -428,6 +470,7 @@ export function calculateWeeklyClassSummaries(
       observedAbsenceCount,
       visitIndices,
       hasLegacyVisits,
+      visitSummaries,
     };
   });
 }
@@ -493,4 +536,134 @@ export function calculateClassReportCore(
     studentsWithSufficientData,
     studentsWithInsufficientData,
   };
+}
+
+export type ReportRangePresetType = "current_week" | "last_4_weeks" | "term" | "year";
+
+/**
+ * Bir WorkCalendar içerisindeki semantik yarıyıl tatilini (semester break) bulur.
+ * Belirli bir akademik yıla hardcode id veya tarih kullanmadan
+ * semantik id veya title deseni (semester, yarıyıl, sömestr) üzerinden tespit eder.
+ */
+export function findSemesterBreak(calendar?: WorkCalendar) {
+  if (!calendar?.breaks?.length) return null;
+  return (
+    calendar.breaks.find((b) => {
+      const idLower = (b.id || "").toLowerCase();
+      const titleLower = (b.title || "").toLowerCase();
+      return (
+        idLower.includes("semester") ||
+        idLower.includes("yariyil") ||
+        titleLower.includes("yarıyıl") ||
+        titleLower.includes("sömestr") ||
+        titleLower.includes("sömestir")
+      );
+    }) ?? null
+  );
+}
+
+/**
+ * ReportRangePreset değerini (current_week, last_4_weeks, term, year)
+ * takvim ve güncel tarih referansıyla somut bir ReportRange { fromWeekStart, toWeekStart } nesnesine dönüştürür.
+ *
+ * Deterministik ve saftır.
+ */
+export function resolveReportRange(
+  preset: ReportRangePresetType,
+  calendar?: WorkCalendar,
+  now = new Date()
+): ReportRange {
+  const currentWeekStart = resolveSessionWeekStart(now.toISOString(), calendar);
+
+  if (preset === "current_week") {
+    return {
+      fromWeekStart: currentWeekStart,
+      toWeekStart: currentWeekStart,
+    };
+  }
+
+  const validCalendar = calendar && isValidWorkCalendar(calendar) ? calendar : undefined;
+  const planWeeks = validCalendar ? buildPlanWeeks(validCalendar) : [];
+
+  if (preset === "year") {
+    if (planWeeks.length > 0) {
+      return {
+        fromWeekStart: planWeeks[0].startDate,
+        toWeekStart: planWeeks[planWeeks.length - 1].startDate,
+      };
+    }
+    const calendarStart = calendar?.startDate ?? "2026-09-14";
+    const calendarEnd = calendar?.endDate ?? "2027-06-25";
+    return {
+      fromWeekStart: resolveSessionWeekStart(calendarStart, calendar),
+      toWeekStart: resolveSessionWeekStart(calendarEnd, calendar),
+    };
+  }
+
+  if (preset === "last_4_weeks") {
+    if (planWeeks.length > 0) {
+      // 1. currentWeekStart'ın PlanWeek listesindeki indeksini bul
+      let currentIndex = planWeeks.findIndex((w) => w.startDate === currentWeekStart);
+      if (currentIndex === -1) {
+        // Eğer güncel tarih takvimden önceyse ilk hafta, sonrasındaysa son hafta
+        if (currentWeekStart < planWeeks[0].startDate) {
+          currentIndex = 0;
+        } else {
+          currentIndex = planWeeks.length - 1;
+        }
+      }
+
+      // 2. Geriye doğru en fazla 4 mevcut PlanWeek seç
+      const startIndex = Math.max(0, currentIndex - 3);
+      return {
+        fromWeekStart: planWeeks[startIndex].startDate,
+        toWeekStart: planWeeks[currentIndex].startDate,
+      };
+    }
+
+    // Takvim yoksa fallback olarak tek hafta
+    return {
+      fromWeekStart: currentWeekStart,
+      toWeekStart: currentWeekStart,
+    };
+  }
+
+  if (preset === "term") {
+    const semesterBreak = findSemesterBreak(calendar);
+
+    if (planWeeks.length > 0 && semesterBreak) {
+      // Yarıyıl tatilinin kapsadığı haftalar: break.startDate <= w.endDate && break.endDate >= w.startDate
+      const term1Weeks = planWeeks.filter((w) => w.startDate < semesterBreak.startDate);
+      const term2Weeks = planWeeks.filter((w) => w.startDate > semesterBreak.endDate);
+
+      const isTerm1 = currentWeekStart < semesterBreak.startDate;
+
+      if (isTerm1 && term1Weeks.length > 0) {
+        return {
+          fromWeekStart: term1Weeks[0].startDate,
+          toWeekStart: term1Weeks[term1Weeks.length - 1].startDate,
+        };
+      } else if (!isTerm1 && term2Weeks.length > 0) {
+        return {
+          fromWeekStart: term2Weeks[0].startDate,
+          toWeekStart: term2Weeks[term2Weeks.length - 1].startDate,
+        };
+      }
+    }
+
+    // Fallback if calendar/semester break not found
+    if (planWeeks.length > 0) {
+      return {
+        fromWeekStart: planWeeks[0].startDate,
+        toWeekStart: planWeeks[planWeeks.length - 1].startDate,
+      };
+    }
+
+    return {
+      fromWeekStart: currentWeekStart,
+      toWeekStart: currentWeekStart,
+    };
+  }
+
+  return {};
 }
