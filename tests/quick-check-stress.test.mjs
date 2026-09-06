@@ -3,10 +3,55 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
 
-async function importTypeScript(path) {
-  const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
-  const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-  return import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+const codeCache = new Map();
+
+async function getTranspiledDataUri(relPath) {
+  if (codeCache.has(relPath)) {
+    return codeCache.get(relPath);
+  }
+
+  const fileUrl = new URL(`../${relPath}`, import.meta.url);
+  const source = await readFile(fileUrl, "utf8");
+  let transpiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  const relRegex = /(import|export)\s+([\s\S]*?)\s+from\s+["'](\.[^"']+)["']/g;
+  const matches = [...transpiled.matchAll(relRegex)];
+
+  for (const match of matches) {
+    const kind = match[1];
+    const specifiers = match[2];
+    const importPath = match[3];
+    const dir = relPath.substring(0, relPath.lastIndexOf("/"));
+    let targetParts = (dir ? dir + "/" + importPath : importPath).split("/");
+    let cleanParts = [];
+    for (const p of targetParts) {
+      if (p === ".") continue;
+      if (p === "..") cleanParts.pop();
+      else cleanParts.push(p);
+    }
+    let targetRel = cleanParts.join("/");
+    if (!targetRel.endsWith(".ts") && !targetRel.endsWith(".js")) {
+      try {
+        await readFile(new URL(`../${targetRel}.ts`, import.meta.url));
+        targetRel = `${targetRel}.ts`;
+      } catch {
+        targetRel = `${targetRel}/index.ts`;
+      }
+    }
+    const targetDataUri = await getTranspiledDataUri(targetRel);
+    transpiled = transpiled.replace(match[0], `${kind} ${specifiers} from "${targetDataUri}"`);
+  }
+
+  const uri = `data:text/javascript;base64,${Buffer.from(transpiled).toString("base64")}`;
+  codeCache.set(relPath, uri);
+  return uri;
+}
+
+async function importTypeScript(relPath) {
+  const uri = await getTranspiledDataUri(relPath);
+  return import(uri);
 }
 
 const quickCheck = await importTypeScript("app/lib/quick-check.ts");

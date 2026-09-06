@@ -1,14 +1,38 @@
-import type { CheckStatus } from "../lib/types";
+import type { CheckStatus, CheckType } from "../lib/types";
+import { getStatusPresentation } from "../lib/quick-check";
 
-const options: { value: CheckStatus; label: string; title: string }[] = [
-  { value: "complete", label: "✓", title: "Tam / Var" },
-  { value: "partial", label: "~", title: "Eksik" },
-  { value: "missing", label: "×", title: "Yok" },
-  { value: "absent", label: "G", title: "Gelmedi" },
-];
+const STATUS_KEYS: CheckStatus[] = ["complete", "partial", "missing", "absent"];
 
-export function StatusSelector({ value, onChange, studentName }: { value: CheckStatus; onChange: (status: CheckStatus) => void; studentName: string }) {
-  return <div className="status-selector" role="radiogroup" aria-label={`${studentName} durumu`}>
-    {options.map((option) => <button key={option.value} type="button" role="radio" aria-checked={value === option.value} aria-label={option.title} title={option.title} className={`status-button status-${option.value} ${value === option.value ? "selected" : ""}`} onClick={() => onChange(option.value)}>{option.label}</button>)}
-  </div>;
+export function StatusSelector({
+  value,
+  onChange,
+  studentName,
+  checkType = "Ödev",
+}: {
+  value: CheckStatus;
+  onChange: (status: CheckStatus) => void;
+  studentName: string;
+  checkType?: CheckType;
+}) {
+  return (
+    <div className="status-selector" role="radiogroup" aria-label={`${studentName} durumu`}>
+      {STATUS_KEYS.map((status) => {
+        const option = getStatusPresentation(checkType, status);
+        return (
+          <button
+            key={status}
+            type="button"
+            role="radio"
+            aria-checked={value === status}
+            aria-label={option.title}
+            title={option.title}
+            className={`status-button status-${status} ${value === status ? "selected" : ""}`}
+            onClick={() => onChange(status)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }

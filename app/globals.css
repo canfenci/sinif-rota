@@ -81,3 +81,17 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .grade-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:24px}
 .grade-confirm-actions .primary-action{min-width:0}
 .grade-confirm-actions .secondary-action{min-height:58px}
+
+/* Quick Check Weekly Visit Context */
+.quick-week-navigator{margin:10px 0 20px}
+.visit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0 16px}
+.visit-grid button{min-height:54px;padding:8px 12px;border:1px solid var(--line);border-radius:5px;background:var(--white);color:var(--ink);font-weight:600;cursor:pointer;display:grid;place-items:center;gap:3px;text-align:center;transition:border-color .15s,background .15s}
+.visit-grid button.selected{border-color:var(--primary);background:var(--primary);color:#fff}
+.visit-title{font:700 14px var(--font-title)}
+.visit-types-summary{font-size:10px;font-weight:500;opacity:.85}
+.visit-grid button.selected .visit-types-summary{color:#fff}
+.new-visit-button{border-style:dashed}
+.legacy-sessions-hint{margin:4px 0 14px;color:var(--muted);font-size:12px;font-style:italic}
+.duplicate-warning{margin:16px 0;padding:12px 14px;border-left:3px solid var(--amber);background:rgba(232,185,79,.12);border-radius:5px}
+.duplicate-warning strong{display:block;font:700 13px var(--font-title);color:#b45309}
+.duplicate-warning p{margin:4px 0 0;color:var(--ink);font-size:12px}

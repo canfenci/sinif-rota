@@ -51,8 +51,25 @@ export function activeStudentCount(schoolClass: SchoolClass) {
   return schoolClass.students.filter((student) => student.active !== false).length;
 }
 
-export function createCheckSession(schoolClass: SchoolClass, type: CheckType, statuses: Record<string, CheckStatus>, date: string, idFactory: () => string): CheckSession {
-  return { id: idFactory(), classId: schoolClass.id, className: schoolClass.name, type, date, statuses };
+export function createCheckSession(
+  schoolClass: SchoolClass,
+  type: CheckType,
+  statuses: Record<string, CheckStatus>,
+  date: string,
+  idFactory: () => string,
+  weekStart?: string,
+  visitIndex?: number
+): CheckSession {
+  return {
+    id: idFactory(),
+    classId: schoolClass.id,
+    className: schoolClass.name,
+    type,
+    date,
+    statuses,
+    ...(weekStart !== undefined ? { weekStart } : {}),
+    ...(visitIndex !== undefined ? { visitIndex } : {}),
+  };
 }
 
 export function transferConflicts(source: SchoolClass, target: SchoolClass, studentIds: string[]) {

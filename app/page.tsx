@@ -13,8 +13,11 @@ import { getCalendarSupportState, resolveDefaultWorkCalendar } from "./lib/acade
 import { detectClassGrade, shouldConfirmGradeChange, updateAnnualPlanEntry } from "./lib/planning";
 import { BUILD_INFO } from "./lib/build-info";
 import { useGreeting } from "./lib/greeting";
-import { createInitialCheckStatuses, updateCheckStatus } from "./lib/quick-check";
-import type { AppData, CheckStatus, CheckType, SchoolClass, Student } from "./lib/types";
+import { createInitialCheckStatuses, getExistingVisitsForWeek, getNextVisitIndex, isDuplicateSession, updateCheckStatus } from "./lib/quick-check";
+import { resolveSessionWeekStart } from "./lib/session-week";
+import { buildPlanWeeks, isValidWorkCalendar } from "./lib/planning/calendar";
+import { formatWeekDateRange, getWeekDisplayEndDate } from "./components/AnnualPlan";
+import type { AppData, CheckSession, CheckStatus, CheckType, SchoolClass, Student, WorkCalendar } from "./lib/types";
 
 type View = "home" | "classes" | "class" | "quick" | "student" | "import" | "plan";
 type EditTarget = { kind: "class"; item?: SchoolClass } | { kind: "student"; item?: Student };
@@ -31,6 +34,8 @@ export default function Home() {
   const [studentId, setStudentId] = useState("");
   const [checkType, setCheckType] = useState<CheckType>("Ödev");
   const [statuses, setStatuses] = useState<Record<string, CheckStatus> | null>(null);
+  const [quickWeekStart, setQuickWeekStart] = useState<string | null>(null);
+  const [quickVisitIndex, setQuickVisitIndex] = useState<number>(1);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [gradeConfirm, setGradeConfirm] = useState<{ id: string; name: string; oldGrade: number | null; newGrade: number | null } | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -183,17 +188,53 @@ export default function Home() {
     setEditTarget(null); showToast("Kayıt silindi");
   }
 
+  const resolvedQuickWeekStart = quickWeekStart ?? (workCalendar ? resolveSessionWeekStart(new Date().toISOString(), workCalendar) : resolveSessionWeekStart(new Date().toISOString()));
+
+  function handleQuickClassChange(nextClassId: string) {
+    setClassId(nextClassId);
+    setQuickVisitIndex(1);
+  }
+
+  function handleQuickWeekChange(nextWeekStart: string) {
+    setQuickWeekStart(nextWeekStart);
+    setQuickVisitIndex(1);
+  }
+
+  function handleQuickTypeChange(nextType: CheckType) {
+    setCheckType(nextType);
+  }
+
+  function handleQuickVisitChange(nextVisitIndex: number) {
+    setQuickVisitIndex(nextVisitIndex);
+  }
+
   function startCheck() {
     const checkClass = activeClasses.find((item) => item.id === classId) ?? activeClasses[0];
     const activeStudents = checkClass?.students.filter((student) => student.active !== false) ?? [];
     if (!checkClass || !activeStudents.length) { showToast("Kontrol için önce aktif öğrenci ekleyin"); return; }
+    if (isDuplicateSession(data.sessions, checkClass.id, resolvedQuickWeekStart, quickVisitIndex, checkType, workCalendar ?? undefined)) {
+      showToast(`Bu girişte ${checkType} kontrolü daha önce kaydedildi`);
+      return;
+    }
     if (checkClass.id !== classId) setClassId(checkClass.id);
     setStatuses(createInitialCheckStatuses(activeStudents)); window.scrollTo(0, 0);
   }
   function saveCheck() {
     const checkClass = activeClasses.find((item) => item.id === classId) ?? activeClasses[0];
     if (!checkClass || !statuses) return;
-    const session = createCheckSession(checkClass, checkType, statuses, new Date().toISOString(), () => crypto.randomUUID());
+    if (isDuplicateSession(data.sessions, checkClass.id, resolvedQuickWeekStart, quickVisitIndex, checkType, workCalendar ?? undefined)) {
+      showToast(`Bu girişte ${checkType} kontrolü daha önce kaydedildi`);
+      return;
+    }
+    const session = createCheckSession(
+      checkClass,
+      checkType,
+      statuses,
+      new Date().toISOString(),
+      () => crypto.randomUUID(),
+      resolvedQuickWeekStart,
+      quickVisitIndex
+    );
     setData((current) => ({ ...current, sessions: [...current.sessions, session] }));
     showToast("Kontrol kaydedildi"); navigate("class");
   }
@@ -376,7 +417,27 @@ export default function Home() {
     {view === "home" && <HomeView classes={activeClasses} recent={recent} onQuick={() => navigate("quick")} onClass={(id) => { setClassId(id); navigate("class"); }} />}
     {view === "classes" && <ClassesView classes={data.classes} onAdd={() => openEdit({ kind: "class" })} onOpen={(id) => { setClassId(id); navigate("class"); }} onEdit={(item) => openEdit({ kind: "class", item })} />}
     {view === "class" && schoolClass && <ClassView key={`${schoolClass.id}-${bulkVersion}`} item={schoolClass} onBack={() => navigate("classes")} onQuick={() => navigate("quick")} onAdd={() => openEdit({ kind: "student" })} onImport={() => navigate("import")} onBulk={(action, studentIds) => setBulkRequest({ action, studentIds })} onOpen={(id) => { setStudentId(id); navigate("student"); }} onEdit={(item) => openEdit({ kind: "student", item })} />}
-    {view === "quick" && <QuickView classes={activeClasses} classId={classId} type={checkType} statuses={statuses} counts={counts} onClass={setClassId} onType={setCheckType} onStart={startCheck} onChange={(id, status) => setStatuses((current) => current ? updateCheckStatus(current, id, status) : current)} onBack={leaveQuickCheck} onSave={saveCheck} />}
+    {view === "quick" && (
+      <QuickView
+        classes={activeClasses}
+        classId={classId}
+        type={checkType}
+        statuses={statuses}
+        counts={counts}
+        sessions={data.sessions}
+        calendar={workCalendar ?? undefined}
+        selectedWeekStart={resolvedQuickWeekStart}
+        selectedVisitIndex={quickVisitIndex}
+        onClass={handleQuickClassChange}
+        onType={handleQuickTypeChange}
+        onWeek={handleQuickWeekChange}
+        onVisit={handleQuickVisitChange}
+        onStart={startCheck}
+        onChange={(id, status) => setStatuses((current) => current ? updateCheckStatus(current, id, status) : current)}
+        onBack={leaveQuickCheck}
+        onSave={saveCheck}
+      />
+    )}
     {view === "student" && student && <StudentView student={student} schoolClass={schoolClass} sessions={data.sessions} onBack={() => navigate("class")} />}
     {view === "import" && schoolClass && <StudentImport schoolClass={schoolClass} onBack={() => navigate("class")} onImport={importStudents} />}
     {view === "plan" && calendarSupportState === "unsupported_year" && <section className="unsupported-year-state" role="status"><p className="kicker">YILLIK PLAN</p><h1>{calendarSchoolYear.replace("-", "–")} Eğitim Öğretim Yılı Henüz Yapılandırılmadı</h1><p>Bu eğitim yılı için resmî MEB çalışma takvimi ve ders planı şablonu henüz sisteme eklenmemiştir.</p></section>}
@@ -414,12 +475,257 @@ function ClassView({ item, onBack, onQuick, onAdd, onImport, onBulk, onOpen, onE
   return <><AppHeader eyebrow={`${activeStudentCount(item)} AKTİF · ${item.students.length} TOPLAM`} title={item.name} back={onBack} /><div className="class-actions"><button className="primary-action" onClick={onQuick} disabled={item.archived || !activeStudentCount(item)}>Kontrol başlat <span>→</span></button><div className="class-tool-row"><button className="secondary-action" onClick={onAdd}>+ Öğrenci</button><button className="secondary-action" onClick={onImport}>Dosyadan aktar</button></div></div>{item.archived && <p className="archive-note">Bu sınıf arşivde. Kontrol başlatmak için sınıfı yeniden etkinleştirin.</p>}{item.students.length ? <><div className="student-toolbar"><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Öğrenci ara" aria-label="Öğrenci ara" /><select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)} aria-label="Öğrenci durumu"><option value="active">Aktif</option><option value="inactive">Pasif</option><option value="all">Tümü</option></select><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} aria-label="Sıralama"><option value="number">Numaraya göre</option><option value="name">Ada göre</option></select><button type="button" className={selecting ? "selected" : ""} onClick={() => { setSelecting((value) => !value); setSelected(new Set()); }}>{selecting ? "Vazgeç" : "Seç"}</button></div><div className="student-list"><div className="list-caption"><span>{selecting ? <button type="button" onClick={() => setSelected(allVisibleSelected ? new Set() : new Set(visible.map((student) => student.id)))}>{allVisibleSelected ? "Seçimi kaldır" : "Görünenleri seç"}</button> : "NO / ÖĞRENCİ"}</span><span>{visible.length} KAYIT</span></div>{visible.map((person) => <div className={`student-row ${selecting ? "selection-open" : ""} ${person.active === false ? "inactive-student" : ""}`} key={person.id}>{selecting && <button type="button" className="student-select" aria-pressed={selected.has(person.id)} aria-label={`${person.name} seç`} onClick={() => toggle(person.id)}>{selected.has(person.id) ? "✓" : ""}</button>}<button className="student-open" onClick={() => selecting ? toggle(person.id) : onOpen(person.id)}><span className="student-no">{String(person.number).padStart(2, "0")}</span><span className="student-name">{person.name}{person.active === false && <small>Pasif</small>}</span><span className="student-detail">{selecting ? "" : "İstatistik →"}</span></button>{!selecting && <button className="row-edit" onClick={() => onEdit(person)} aria-label={`${person.name} düzenle`}>•••</button>}</div>)}{!visible.length && <EmptyState title="Öğrenci bulunamadı" text="Arama veya durum filtresini değiştirin." />}</div>{selecting && selected.size > 0 && <div className="bulk-dock"><strong>{selected.size} seçili</strong><div><button onClick={() => onBulk("move", [...selected])}>Taşı</button><button onClick={() => onBulk("copy", [...selected])}>Kopyala</button><button onClick={() => onBulk("activate", [...selected])}>Aktif</button><button onClick={() => onBulk("deactivate", [...selected])}>Pasif</button><button className="bulk-delete" onClick={() => onBulk("delete", [...selected])}>Sil</button></div></div>}</> : <EmptyState title="Bu sınıfta öğrenci yok" text="Tek tek ekleyebilir veya Excel/CSV dosyasından aktarabilirsiniz." />}</>;
 }
 
-function QuickView({ classes, classId, type, statuses, counts, onClass, onType, onStart, onChange, onBack, onSave }: { classes: SchoolClass[]; classId: string; type: CheckType; statuses: Record<string, CheckStatus> | null; counts: Record<CheckStatus, number> | null; onClass: (id: string) => void; onType: (type: CheckType) => void; onStart: () => void; onChange: (id: string, status: CheckStatus) => void; onBack: () => void; onSave: () => void }) {
-  if (!classes.length) return <><AppHeader eyebrow="HIZLI KONTROL" title="Önce sınıf ekleyin" back={onBack} /><EmptyState title="Kontrol başlatılamıyor" text="Sınıflar bölümünden bir sınıf ve öğrenci listesi oluşturun." /></>;
+function QuickView({
+  classes,
+  classId,
+  type,
+  statuses,
+  counts,
+  sessions,
+  calendar,
+  selectedWeekStart,
+  selectedVisitIndex,
+  onClass,
+  onType,
+  onWeek,
+  onVisit,
+  onStart,
+  onChange,
+  onBack,
+  onSave,
+}: {
+  classes: SchoolClass[];
+  classId: string;
+  type: CheckType;
+  statuses: Record<string, CheckStatus> | null;
+  counts: Record<CheckStatus, number> | null;
+  sessions: CheckSession[];
+  calendar?: WorkCalendar;
+  selectedWeekStart: string;
+  selectedVisitIndex: number;
+  onClass: (id: string) => void;
+  onType: (type: CheckType) => void;
+  onWeek: (weekStart: string) => void;
+  onVisit: (visitIndex: number) => void;
+  onStart: () => void;
+  onChange: (id: string, status: CheckStatus) => void;
+  onBack: () => void;
+  onSave: () => void;
+}) {
   const item = classes.find((entry) => entry.id === classId) ?? classes[0];
-  const activeStudents = item.students.filter((student) => student.active !== false);
-  if (!statuses) return <><AppHeader eyebrow="2 ADIMDA HAZIR" title="Hızlı Kontrol" back={onBack} /><section className="setup-panel"><label><span>1 · Sınıfı seçin</span><select value={classId} onChange={(event) => onClass(event.target.value)}>{classes.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {activeStudentCount(entry)} aktif öğrenci</option>)}</select></label><div><span className="field-label">2 · Kontrol türü</span><div className="type-grid">{checkTypes.map((entry) => <button className={type === entry ? "selected" : ""} key={entry} onClick={() => onType(entry)}>{entry}</button>)}</div></div><div className="default-note"><strong>Herkes “Tam” başlayacak.</strong><p>Yalnızca aktif öğrenciler kontrole alınır; istisnaları değiştirmeniz yeterli.</p></div><button className="primary-action" onClick={onStart} disabled={!activeStudents.length}>Kontrolü başlat <span>→</span></button></section></>;
-  return <><div className="quick-top"><button className="back-button" onClick={onBack} aria-label="Kontrol kurulumuna dön">←</button><div><p className="eyebrow">{type.toLocaleUpperCase("tr-TR")} KONTROLÜ</p><h1>{item.name} · {activeStudents.length} öğrenci</h1></div></div><div className="status-legend" aria-hidden="true"><span>✓ Tam</span><span>~ Eksik</span><span>× Yok</span><span className="absent-legend">G Gelmedi</span></div><div className="check-list">{activeStudents.map((person) => <div className="check-row" key={person.id}><div className="check-name"><span>{String(person.number).padStart(2, "0")}</span><strong>{person.name}</strong></div><StatusSelector value={statuses[person.id]} studentName={person.name} onChange={(status) => onChange(person.id, status)} /></div>)}</div><div className="save-dock"><div className="live-summary" aria-live="polite" aria-label={`${counts?.complete} tam, ${counts?.partial} eksik, ${counts?.missing} yok, ${counts?.absent} gelmedi`}><span><b>{counts?.complete}</b> ✓</span><span><b>{counts?.partial}</b> ~</span><span><b>{counts?.missing}</b> ×</span><span className="absent-count"><b>{counts?.absent}</b> G</span></div><button onClick={onSave}>Kontrolü Kaydet</button></div></>;
+  const activeStudents = item ? item.students.filter((student) => student.active !== false) : [];
+  const itemId = item?.id ?? "";
+
+  const planWeeks = useMemo(() => (calendar && isValidWorkCalendar(calendar) ? buildPlanWeeks(calendar) : []), [calendar]);
+  const activeWeekIndex = planWeeks.findIndex((w) => w.startDate === selectedWeekStart);
+  const currentWeekObj = activeWeekIndex >= 0 ? planWeeks[activeWeekIndex] : undefined;
+  const weekTitle = currentWeekObj ? `${currentWeekObj.number}. Hafta` : "Ders Haftası";
+  const weekDateRange = currentWeekObj
+    ? formatWeekDateRange(currentWeekObj.startDate, getWeekDisplayEndDate(currentWeekObj))
+    : selectedWeekStart;
+  const canPrevWeek = activeWeekIndex > 0;
+  const canNextWeek = activeWeekIndex >= 0 && activeWeekIndex < planWeeks.length - 1;
+
+  const { visits: existingVisits, hasLegacySessions } = useMemo(
+    () => (itemId ? getExistingVisitsForWeek(sessions, itemId, selectedWeekStart, calendar) : { visits: [], hasLegacySessions: false }),
+    [sessions, itemId, selectedWeekStart, calendar]
+  );
+  const nextNewVisitIndex = getNextVisitIndex(existingVisits);
+  const visitIndices = new Set(existingVisits.map((v) => v.visitIndex));
+  if (visitIndices.size === 0) {
+    visitIndices.add(1);
+  }
+  visitIndices.add(selectedVisitIndex);
+  const sortedVisitIndices = Array.from(visitIndices).sort((a, b) => a - b);
+  const showAddButton = !sortedVisitIndices.includes(nextNewVisitIndex);
+
+  const isDuplicate = Boolean(itemId && isDuplicateSession(sessions, itemId, selectedWeekStart, selectedVisitIndex, type, calendar));
+  const isHomework = type === "Ödev";
+
+  if (!classes.length || !item) {
+    return (
+      <>
+        <AppHeader eyebrow="HIZLI KONTROL" title="Önce sınıf ekleyin" back={onBack} />
+        <EmptyState title="Kontrol başlatılamıyor" text="Sınıflar bölümünden bir sınıf ve öğrenci listesi oluşturun." />
+      </>
+    );
+  }
+
+  if (!statuses) {
+    return (
+      <>
+        <AppHeader eyebrow="HAFTALIK KONTROL" title="Hızlı Kontrol" back={onBack} />
+        <section className="setup-panel">
+          <label>
+            <span>1 · Sınıfı seçin</span>
+            <select value={classId} onChange={(event) => onClass(event.target.value)}>
+              {classes.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name} · {activeStudentCount(entry)} aktif öğrenci
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div>
+            <span className="field-label">2 · Hafta seçimi</span>
+            <div className="week-navigator quick-week-navigator" role="region" aria-label="Hafta seçimi">
+              <button
+                type="button"
+                className="week-nav-button"
+                onClick={() => canPrevWeek && onWeek(planWeeks[activeWeekIndex - 1].startDate)}
+                disabled={!canPrevWeek}
+                aria-label="Önceki hafta"
+              >
+                ‹
+              </button>
+              <div className="week-nav-info">
+                <span className="week-nav-title">{weekTitle}</span>
+                <span className="week-nav-meta">{weekDateRange}</span>
+              </div>
+              <button
+                type="button"
+                className="week-nav-button"
+                onClick={() => canNextWeek && onWeek(planWeeks[activeWeekIndex + 1].startDate)}
+                disabled={!canNextWeek}
+                aria-label="Sonraki hafta"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <span className="field-label">3 · Ders Girişi</span>
+            <div className="visit-grid" role="radiogroup" aria-label="Ders Girişi">
+              {sortedVisitIndices.map((idx) => {
+                const summary = existingVisits.find((v) => v.visitIndex === idx);
+                const hasTypes = summary && summary.types.length > 0;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    role="radio"
+                    aria-checked={selectedVisitIndex === idx}
+                    className={selectedVisitIndex === idx ? "selected" : ""}
+                    onClick={() => onVisit(idx)}
+                  >
+                    <span className="visit-title">{idx}. Giriş</span>
+                    {hasTypes && (
+                      <span className="visit-types-summary">
+                        {summary.types.join(" ✓ · ")} ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {showAddButton && (
+                <button
+                  type="button"
+                  className={`new-visit-button ${selectedVisitIndex === nextNewVisitIndex ? "selected" : ""}`}
+                  onClick={() => onVisit(nextNewVisitIndex)}
+                >
+                  <span className="visit-title">+ Yeni Giriş</span>
+                  <span className="visit-types-summary">({nextNewVisitIndex}. Giriş)</span>
+                </button>
+              )}
+            </div>
+            {hasLegacySessions && (
+              <p className="legacy-sessions-hint">Bu hafta için ziyaret sırası belirtilmemiş eski kayıtlar mevcut.</p>
+            )}
+          </div>
+
+          <div>
+            <span className="field-label">4 · Kontrol türü</span>
+            <div className="type-grid">
+              {checkTypes.map((entry) => (
+                <button
+                  className={type === entry ? "selected" : ""}
+                  key={entry}
+                  onClick={() => onType(entry)}
+                >
+                  {entry}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isDuplicate && (
+            <div className="duplicate-warning" role="alert">
+              <strong>⚠️ Bu girişte {type} kontrolü daha önce kaydedildi.</strong>
+              <p>Farklı bir kontrol türü seçebilir veya yeni bir ders girişi başlatabilirsiniz.</p>
+            </div>
+          )}
+
+          <div className="default-note">
+            <strong>Herkes “{isHomework ? "Yaptı" : "Getirdi"}” başlayacak.</strong>
+            <p>Yalnızca aktif öğrenciler kontrole alınır; istisnaları değiştirmeniz yeterli.</p>
+          </div>
+
+          <button
+            className="primary-action"
+            onClick={onStart}
+            disabled={Boolean(isDuplicate || !activeStudents.length)}
+          >
+            Kontrolü başlat <span>→</span>
+          </button>
+        </section>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="quick-top">
+        <button className="back-button" onClick={onBack} aria-label="Kontrol kurulumuna dön">
+          ←
+        </button>
+        <div>
+          <p className="eyebrow">
+            {type.toLocaleUpperCase("tr-TR")} KONTROLÜ · {selectedVisitIndex}. GİRİŞ
+          </p>
+          <h1>
+            {item.name} · {weekTitle}
+          </h1>
+        </div>
+      </div>
+      <div className="status-legend" aria-hidden="true">
+        <span>✓ {isHomework ? "Yaptı" : "Getirdi"}</span>
+        <span>~ Eksik</span>
+        <span>× {isHomework ? "Yapmadı" : "Getirmedi"}</span>
+        <span className="absent-legend">G Gelmedi</span>
+      </div>
+      <div className="check-list">
+        {activeStudents.map((person) => (
+          <div className="check-row" key={person.id}>
+            <div className="check-name">
+              <span>{String(person.number).padStart(2, "0")}</span>
+              <strong>{person.name}</strong>
+            </div>
+            <StatusSelector
+              value={statuses[person.id]}
+              studentName={person.name}
+              checkType={type}
+              onChange={(status) => onChange(person.id, status)}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="save-dock">
+        <div
+          className="live-summary"
+          aria-live="polite"
+          aria-label={`${counts?.complete} ${isHomework ? "yaptı" : "getirdi"}, ${counts?.partial} eksik, ${counts?.missing} ${isHomework ? "yapmadı" : "getirmedi"}, ${counts?.absent} gelmedi`}
+        >
+          <span><b>{counts?.complete}</b> ✓</span>
+          <span><b>{counts?.partial}</b> ~</span>
+          <span><b>{counts?.missing}</b> ×</span>
+          <span className="absent-count"><b>{counts?.absent}</b> G</span>
+        </div>
+        <button onClick={onSave}>Kontrolü Kaydet</button>
+      </div>
+    </>
+  );
 }
 
 function StudentView({ student, schoolClass, sessions, onBack }: { student: Student; schoolClass: SchoolClass; sessions: AppData["sessions"]; onBack: () => void }) {
