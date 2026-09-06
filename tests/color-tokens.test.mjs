@@ -14,6 +14,8 @@ const manifestWeb = JSON.parse(fs.readFileSync(manifestWebPath, "utf8"));
 const manifestJson = JSON.parse(fs.readFileSync(manifestJsonPath, "utf8"));
 const layoutContent = fs.readFileSync(layoutPath, "utf8");
 const pageContent = fs.readFileSync(path.resolve("app/page.tsx"), "utf8");
+const seedContent = fs.readFileSync(path.resolve("app/lib/seed.ts"), "utf8");
+const migrationsContent = fs.readFileSync(path.resolve("app/lib/migrations.ts"), "utf8");
 
 test("A. Old primary green/cream palette tokens are not used as primary active colors", () => {
   // Ensure old primary green #17664d and cream #f6f5f0 are not in root tokens
@@ -105,9 +107,12 @@ test("L. Annual Plan week navigator and detail cards use the new palette tokens"
   assert.ok(css.includes(".official-source-link{color:var(--primary);font-size:11px;font-weight:600;text-decoration:underline;display:inline-flex;align-items:center;min-height:28px}"));
 });
 
-test("M. Official outcome description uses main ink color and is not muted", () => {
+test("M. Official outcome description uses main ink color, stronger weight, and is not muted", () => {
   assert.match(css, /\.official-outcome-text\{[^}]*color:var\(--ink\)/);
+  assert.match(css, /\.official-outcome-text\{[^}]*font-weight:600/);
+  assert.match(css, /\.official-outcome-text\{[^}]*opacity:1/);
   assert.doesNotMatch(css, /\.official-outcome-text\{[^}]*color:var\(--muted\)/);
+  assert.doesNotMatch(css, /\.official-outcome-text\{[^}]*opacity:\.(?:[0-9]+)/);
 });
 
 test("N. Grade identity tokens use the requested non-status colors", () => {
@@ -143,4 +148,13 @@ test("Q. Grade 6 yellow badge keeps dark ink text for contrast", () => {
 test("R. Visual polish keeps curriculum modules out of homepage changes", () => {
   assert.doesNotMatch(pageContent, /from "\.\/lib\/curriculum/);
   assert.doesNotMatch(pageContent, /officialCurriculumRegistry/);
+});
+
+test("S. Persisted user class data is not globally renamed by seed or migration code", () => {
+  assert.ok(seedContent.includes("export const seedData: AppData = emptyAppData"));
+  assert.ok(seedContent.includes('const classNames = ["5-A", "5-B", "5-C", "5-D", "5-E"]'));
+  assert.doesNotMatch(migrationsContent, /5-C[\s\S]*6-A/);
+  assert.doesNotMatch(migrationsContent, /5-D[\s\S]*7-A/);
+  assert.doesNotMatch(migrationsContent, /5-E[\s\S]*8-A/);
+  assert.doesNotMatch(migrationsContent, /renameClass|classNames|seedClasses/);
 });
