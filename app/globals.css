@@ -77,3 +77,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .update-banner-dismiss{flex:0 0 auto;min-height:44px;min-width:64px;padding:0 16px;border:0;border-radius:6px;background:var(--primary);color:#fff;font-weight:600;font-size:13px;cursor:pointer}
 .update-banner-dismiss:hover{background:var(--primary-dark)}
 @media(min-width:700px){.update-banner{bottom:calc(env(safe-area-inset-bottom,0px) + 96px)}}
+.grade-confirm-text{margin:0;color:var(--muted);font-size:13px;line-height:1.55}
+.grade-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:24px}
+.grade-confirm-actions .primary-action{min-width:0}
+.grade-confirm-actions .secondary-action{min-height:58px}

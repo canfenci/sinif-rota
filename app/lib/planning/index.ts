@@ -53,5 +53,6 @@ export {
   isGrade7Class,
   isGrade8Class,
   detectClassGrade,
+  shouldConfirmGradeChange,
   buildSciencePlanForClass,
 } from "./grade-router";

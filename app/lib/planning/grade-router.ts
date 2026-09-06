@@ -31,6 +31,10 @@ export function detectClassGrade(name: string): ClassGrade | null {
   return null;
 }
 
+export function shouldConfirmGradeChange(oldName: string, newName: string): boolean {
+  return detectClassGrade(oldName) !== detectClassGrade(newName);
+}
+
 export function buildSciencePlanForClass(className: string, calendar: WorkCalendar): SciencePlan | null {
   switch (detectClassGrade(className)) {
     case 5: return buildGrade5SciencePlan(calendar);

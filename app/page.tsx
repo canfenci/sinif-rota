@@ -10,7 +10,7 @@ import { emptyAppData } from "./lib/seed";
 import { checkTypes, studentHistorySessions, studentStats } from "./lib/stats";
 import { STORAGE_KEY, browserLocalStorage, createBrowserLockCoordinator, createCoordinatedSaveQueue, determineSaveWarning, downloadEmergencyExport, loadCoordinated, prepareEmergencyExport, type AppLoadState, type CoordinatedSaveQueue } from "./lib/storage";
 import { getCalendarSupportState, resolveDefaultWorkCalendar } from "./lib/academic-year";
-import { detectClassGrade, updateAnnualPlanEntry } from "./lib/planning";
+import { detectClassGrade, shouldConfirmGradeChange, updateAnnualPlanEntry } from "./lib/planning";
 import { BUILD_INFO } from "./lib/build-info";
 import { useGreeting } from "./lib/greeting";
 import { createInitialCheckStatuses, updateCheckStatus } from "./lib/quick-check";
@@ -32,6 +32,7 @@ export default function Home() {
   const [checkType, setCheckType] = useState<CheckType>("Ödev");
   const [statuses, setStatuses] = useState<Record<string, CheckStatus> | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [gradeConfirm, setGradeConfirm] = useState<{ id: string; name: string; oldGrade: number | null; newGrade: number | null } | null>(null);
   const [draftName, setDraftName] = useState("");
   const [draftNumber, setDraftNumber] = useState("");
   const [deleteArmed, setDeleteArmed] = useState(false);
@@ -138,6 +139,10 @@ export default function Home() {
       if (classNameExists(data.classes, name, editTarget.item?.id)) { showToast("Bu sınıf adı zaten kullanılıyor"); return; }
       if (editTarget.item) {
         const editedId = editTarget.item.id;
+        if (shouldConfirmGradeChange(editTarget.item.name, name)) {
+          setGradeConfirm({ id: editedId, name, oldGrade: detectClassGrade(editTarget.item.name), newGrade: detectClassGrade(name) });
+          return;
+        }
         setData((current) => renameClass(current, editedId, name));
       } else {
         const id = crypto.randomUUID();
@@ -155,6 +160,12 @@ export default function Home() {
       }) }));
     }
     setEditTarget(null); showToast("Değişiklik kaydedildi");
+  }
+
+  function confirmGradeChange() {
+    if (!gradeConfirm) return;
+    setData((current) => renameClass(current, gradeConfirm.id, gradeConfirm.name));
+    setGradeConfirm(null); setEditTarget(null); showToast("Değişiklik kaydedildi");
   }
 
   function deleteTarget() {
@@ -373,6 +384,7 @@ export default function Home() {
 
     {view !== "quick" && view !== "student" && view !== "import" && <nav className="bottom-nav" aria-label="Ana menü"><button className={view === "home" ? "nav-active" : ""} onClick={() => navigate("home")}>Ana Sayfa</button><button className={view === "classes" || view === "class" ? "nav-active" : ""} onClick={() => navigate("classes")}>Sınıflar</button><button className={view === "plan" ? "nav-active" : ""} onClick={() => navigate("plan")}>Yıllık Plan</button></nav>}
     {editTarget && <Sheet title={`${editTarget.item ? "Düzenle" : "Yeni"} ${editTarget.kind === "class" ? "sınıf" : "öğrenci"}`} onClose={() => setEditTarget(null)}><div className="form-stack"><label>Adı<input data-autofocus value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder={editTarget.kind === "class" ? "Örn. 5-F" : "Ad Soyad"} onKeyDown={(event) => event.key === "Enter" && saveEdit()} /></label>{editTarget.kind === "student" && <label>Okul numarası<input inputMode="numeric" min="1" max="999" type="number" value={draftNumber} onChange={(event) => setDraftNumber(event.target.value)} onKeyDown={(event) => event.key === "Enter" && saveEdit()} /></label>}<button className="primary-action" onClick={saveEdit}>Kaydet <span>→</span></button>{editTarget.kind === "class" && editTarget.item && <div className="class-record-actions"><button type="button" onClick={duplicateSelectedClass}>Sınıfı çoğalt</button><button type="button" onClick={toggleClassArchive}>{editTarget.item.archived ? "Arşivden çıkar" : "Sınıfı arşivle"}</button></div>}{editTarget.item && <>{deleteArmed && <p className="delete-warning">Bu işlem ilgili geçmiş kayıtları da kalıcı olarak siler.</p>}<button className={`danger-action ${deleteArmed ? "danger-confirm" : ""}`} onClick={deleteTarget}>{deleteArmed ? "Silme işlemini onayla" : "Kaydı sil"}</button></>}</div></Sheet>}
+    {gradeConfirm && <Sheet title="Sınıf seviyesi değişiyor" onClose={() => setGradeConfirm(null)}><div className="form-stack"><p className="grade-confirm-text">{gradeConfirm.oldGrade != null && gradeConfirm.newGrade != null ? `Bu sınıf ${gradeConfirm.oldGrade}. sınıftan ${gradeConfirm.newGrade}. sınıfa geçecek. Öğrenciler ve geçmiş kontroller korunur; Yıllık Plan yeni sınıf seviyesinin programını kullanır.` : gradeConfirm.oldGrade == null && gradeConfirm.newGrade != null ? `Bu sınıf artık ${gradeConfirm.newGrade}. sınıf olarak tanınacak. Öğrenciler ve geçmiş kontroller korunur; Yıllık Plan ${gradeConfirm.newGrade}. sınıf programını kullanır.` : `Yeni sınıf adı bir sınıf seviyesiyle eşleşmiyor. Öğrenciler ve geçmiş kontroller korunur; otomatik Yıllık Plan kullanılamayabilir.`}</p><div className="grade-confirm-actions"><button type="button" className="secondary-action" onClick={() => setGradeConfirm(null)}>Vazgeç</button><button type="button" className="primary-action" onClick={confirmGradeChange}>Değişikliği Onayla <span>→</span></button></div></div></Sheet>}
     {bulkRequest && schoolClass && <BulkActionSheet request={bulkRequest} source={schoolClass} classes={activeClasses} onClose={() => setBulkRequest(null)} onConfirm={runBulkAction} />}
     {toast && <div className="toast" role="status"><span>✓ {toast}</span>{undoSnapshot && <button type="button" onClick={undoLast}>Geri al</button>}</div>}
   </main>;
