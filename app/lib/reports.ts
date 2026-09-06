@@ -87,6 +87,34 @@ export interface DataSufficiency {
 }
 
 /**
+ * Tek bir kontrole ait öğrenci durumu.
+ */
+export interface StudentVisitCheck {
+  type: CheckType;
+  status: CheckStatus;
+  date: string;
+}
+
+/**
+ * Öğrencinin bir girişteki (ziyaretteki) kontrolleri.
+ */
+export interface StudentVisitHistory {
+  visitIndex?: number;
+  checks: StudentVisitCheck[];
+}
+
+/**
+ * Öğrenci bazında haftalık geçmiş DTO'su.
+ */
+export interface StudentWeeklyHistory {
+  weekStart: string;
+  weekNumber?: number;
+  visits: StudentVisitHistory[];
+  typeBreakdowns: Record<CheckType, TypeBreakdown>;
+  observedAbsenceCount: number;
+}
+
+/**
  * Bireysel öğrenci için saf çekirdek rapor DTO'su.
  */
 export interface StudentReportCoreDTO {
@@ -103,6 +131,7 @@ export interface StudentReportCoreDTO {
   participationRawAverage: number | null;
   dataSufficiency: DataSufficiency;
   suggestedParticipationScore: number | null;
+  weeklyHistory: StudentWeeklyHistory[];
 }
 
 /**
@@ -357,6 +386,8 @@ export function calculateStudentReportCore(
       ? Math.round(participationRawAverage)
       : null;
 
+  const weeklyHistory = calculateStudentWeeklyHistory(student, schoolClass, sessions, options);
+
   return {
     studentId: student.id,
     studentNumber: student.number,
@@ -371,7 +402,117 @@ export function calculateStudentReportCore(
     participationRawAverage,
     dataSufficiency,
     suggestedParticipationScore,
+    weeklyHistory,
   };
+}
+
+/**
+ * Bir öğrenci için haftalık geçmişi hesaplar.
+ *
+ * Sıralama kuralı:
+ * - Öğretmenin veli görüşmesinde ve değerlendirmede güncel durumu önce görmesi için
+ *   haftalar YENİDEN ESKİYE (descending / en yeni hafta üstte) sıralanır.
+ * - Hafta içinde ziyaretler (visits) ise 1. Giriş, 2. Giriş, ... şeklinde ARTAN (ascending) sırada,
+ *   en sonda ise legacy (giriş bilgisi olmayan) ziyaret gösterilir.
+ *
+ * Girdi nesneleri kesinlikle mutate edilmez.
+ */
+export function calculateStudentWeeklyHistory(
+  student: Student,
+  schoolClass: SchoolClass,
+  sessions: CheckSession[],
+  options?: { range?: ReportRange; calendar?: WorkCalendar }
+): StudentWeeklyHistory[] {
+  const weekMap = new Map<string, CheckSession[]>();
+
+  for (const session of sessions) {
+    if (session.classId !== schoolClass.id) continue;
+    if (!(student.id in session.statuses)) continue;
+    const weekStart = resolveEffectiveWeekStart(session, options?.calendar);
+    if (!isWeekInRange(weekStart, options?.range)) continue;
+
+    if (!weekMap.has(weekStart)) {
+      weekMap.set(weekStart, []);
+    }
+    weekMap.get(weekStart)!.push(session);
+  }
+
+  // En yeni hafta üstte (descending)
+  const sortedWeeks = Array.from(weekMap.keys()).sort((a, b) => b.localeCompare(a));
+
+  const validCalendar = options?.calendar && isValidWorkCalendar(options.calendar) ? options.calendar : undefined;
+  const planWeeks = validCalendar ? buildPlanWeeks(validCalendar) : [];
+
+  return sortedWeeks.map((weekStart) => {
+    const weekSessions = weekMap.get(weekStart)!;
+
+    // Hafta için typeBreakdowns
+    const typeBreakdowns = {} as Record<CheckType, TypeBreakdown>;
+    for (const type of ALL_CHECK_TYPES) {
+      const typeSessions = weekSessions.filter((s) => s.type === type);
+      const statuses = typeSessions.map((s) => s.statuses[student.id]);
+      typeBreakdowns[type] = calculateTypeBreakdown(statuses, type);
+    }
+
+    const observedAbsenceCount = ALL_CHECK_TYPES.reduce(
+      (sum, t) => sum + typeBreakdowns[t].absent,
+      0
+    );
+
+    // Hafta numarası (varsa)
+    const planWeek = planWeeks.find((w) => w.startDate === weekStart);
+    const weekNumber = planWeek?.number;
+
+    // Visit gruplama
+    const visitIndices = Array.from(
+      new Set(
+        weekSessions
+          .map((s) => s.visitIndex)
+          .filter((v): v is number => typeof v === "number" && Number.isInteger(v) && v >= 1)
+      )
+    ).sort((a, b) => a - b);
+
+    const hasLegacyVisits = weekSessions.some((s) => s.visitIndex === undefined);
+
+    const visits: StudentVisitHistory[] = [];
+
+    for (const vIdx of visitIndices) {
+      const vSessions = weekSessions.filter((s) => s.visitIndex === vIdx);
+      // Oturumları kronolojik (tarihe göre) sırala
+      vSessions.sort((a, b) => a.date.localeCompare(b.date));
+      const checks: StudentVisitCheck[] = vSessions.map((s) => ({
+        type: s.type,
+        status: s.statuses[student.id],
+        date: s.date,
+      }));
+      visits.push({
+        visitIndex: vIdx,
+        checks,
+      });
+    }
+
+    if (hasLegacyVisits) {
+      const legacySessions = weekSessions.filter((s) => s.visitIndex === undefined);
+      legacySessions.sort((a, b) => a.date.localeCompare(b.date));
+      const checks: StudentVisitCheck[] = legacySessions.map((s) => ({
+        type: s.type,
+        status: s.statuses[student.id],
+        date: s.date,
+      }));
+      visits.push({
+        visitIndex: undefined,
+        checks,
+      });
+    }
+
+    return {
+      weekStart,
+      weekNumber,
+      visits,
+      typeBreakdowns,
+      observedAbsenceCount,
+    };
+  });
 }
 
 /**
