@@ -313,3 +313,13 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .recommendation-message{margin:0;font-size:13px;color:var(--ink);line-height:1.5}
 .recommendation-evidence-list{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-top:2px}
 .recommendation-evidence-pill{display:inline-flex;align-items:center;padding:2px 6px;border-radius:3px;background:var(--white);border:1px solid var(--line);font-size:11px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.teacher-eval-section{margin-top:18px;padding:18px;border:1px solid var(--line);border-left:4px solid var(--primary);border-radius:8px;background:var(--white);display:grid;gap:12px}
+.teacher-eval-label{display:grid;gap:6px;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.teacher-eval-textarea{width:100%;min-height:110px;padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--white);font:400 14px/1.5 var(--font-ui);color:var(--ink);resize:vertical}
+.teacher-eval-textarea:focus{outline:2px solid var(--primary);outline-offset:1px;border-color:var(--primary)}
+.teacher-eval-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.teacher-eval-counter{font-size:11px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.teacher-eval-dirty{padding:2px 8px;border-radius:4px;background:rgba(232,185,79,.16);color:#8A5D00;font-size:11px;font-weight:700}
+.teacher-eval-saved{font-size:11px;font-weight:600;color:var(--muted)}
+.teacher-eval-actions{display:grid;gap:10px}
+.teacher-eval-actions .primary-action:disabled{opacity:.45;cursor:not-allowed}

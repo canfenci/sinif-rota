@@ -1,4 +1,4 @@
-import type { AnnualPlanEntry, AppData, CalendarBreak, CheckSession, CheckStatus, CheckType, SchoolClass, Student, WorkCalendar } from "./types";
+import type { AnnualPlanEntry, AppData, CalendarBreak, CheckSession, CheckStatus, CheckType, SchoolClass, Student, TeacherEvaluation, WorkCalendar } from "./types";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -115,6 +115,81 @@ function isValidAnnualPlanEntry(entry: unknown): entry is AnnualPlanEntry {
   return true;
 }
 
+function isValidCalendarDateString(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const dateObj = new Date(Date.UTC(year, month - 1, day));
+  return (
+    dateObj.getUTCFullYear() === year &&
+    dateObj.getUTCMonth() === month - 1 &&
+    dateObj.getUTCDate() === day
+  );
+}
+
+function isValidTimestampString(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "" && !Number.isNaN(Date.parse(value));
+}
+
+function buildExpectedTeacherEvaluationId(entry: {
+  scope: "student" | "class_general";
+  classId: string;
+  studentId?: string;
+  fromWeekStart: string;
+  toWeekStart: string;
+}): string {
+  if (entry.scope === "student") {
+    return `eval:student:${entry.classId}:${entry.studentId}:${entry.fromWeekStart}:${entry.toWeekStart}`;
+  }
+  return `eval:class_general:${entry.classId}:${entry.fromWeekStart}:${entry.toWeekStart}`;
+}
+
+function isValidTeacherEvaluation(entry: unknown): entry is TeacherEvaluation {
+  if (!isPlainObject(entry)) return false;
+  if (entry.scope !== "student" && entry.scope !== "class_general") return false;
+  if (typeof entry.classId !== "string" || entry.classId.trim() === "") return false;
+  if (!isValidCalendarDateString(entry.fromWeekStart)) return false;
+  if (!isValidCalendarDateString(entry.toWeekStart)) return false;
+  if ((entry.fromWeekStart as string) > (entry.toWeekStart as string)) return false;
+  if (typeof entry.text !== "string") return false;
+  const trimmed = (entry.text as string).trim();
+  if (trimmed === "" || trimmed.length > 2000) return false;
+  if (!isValidTimestampString(entry.createdAt)) return false;
+  if (!isValidTimestampString(entry.updatedAt)) return false;
+
+  let expectedId: string;
+  if (entry.scope === "student") {
+    if (typeof entry.studentId !== "string" || entry.studentId.trim() === "") return false;
+    expectedId = buildExpectedTeacherEvaluationId({
+      scope: "student",
+      classId: entry.classId as string,
+      studentId: entry.studentId as string,
+      fromWeekStart: entry.fromWeekStart as string,
+      toWeekStart: entry.toWeekStart as string,
+    });
+  } else {
+    if (entry.studentId !== undefined) return false;
+    expectedId = buildExpectedTeacherEvaluationId({
+      scope: "class_general",
+      classId: entry.classId as string,
+      fromWeekStart: entry.fromWeekStart as string,
+      toWeekStart: entry.toWeekStart as string,
+    });
+  }
+  if (typeof entry.id !== "string" || entry.id !== expectedId) return false;
+  return true;
+}
+
+function isValidTeacherEvaluationList(entries: unknown): entries is TeacherEvaluation[] {
+  if (!Array.isArray(entries)) return false;
+  const seenIds = new Set<string>();
+  for (const item of entries) {
+    if (!isValidTeacherEvaluation(item)) return false;
+    if (seenIds.has(item.id)) return false;
+    seenIds.add(item.id);
+  }
+  return true;
+}
+
 function deepCloneStudent(student: Student): Student {
   return {
     ...student,
@@ -183,6 +258,24 @@ function deepCloneAnnualPlanEntry(entry: AnnualPlanEntry): AnnualPlanEntry {
   };
 }
 
+function deepCloneTeacherEvaluation(entry: TeacherEvaluation): TeacherEvaluation {
+  const clone: TeacherEvaluation = {
+    ...entry,
+    id: entry.id,
+    scope: entry.scope,
+    classId: entry.classId,
+    fromWeekStart: entry.fromWeekStart,
+    toWeekStart: entry.toWeekStart,
+    text: entry.text,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+  if (entry.studentId !== undefined) {
+    clone.studentId = entry.studentId;
+  }
+  return clone;
+}
+
 export function detectSchemaVersion(raw: unknown): number | null {
   if (!isPlainObject(raw)) return null;
 
@@ -244,6 +337,12 @@ export function migrateV0ToV1(raw: unknown): MigrationResult {
     }
   }
 
+  if (raw.teacherEvaluations !== undefined && raw.teacherEvaluations !== null) {
+    if (!isValidTeacherEvaluationList(raw.teacherEvaluations)) {
+      return { status: "invalid_data", reason: "Invalid \x27teacherEvaluations\x27 (must be array of valid evaluations with unique deterministic ids) in legacy v0 data", raw };
+    }
+  }
+
   const result: AppData & { schemaVersion: 1 } = {
     ...raw,
     schemaVersion: 1,
@@ -251,6 +350,7 @@ export function migrateV0ToV1(raw: unknown): MigrationResult {
     sessions: (raw.sessions as CheckSession[]).map(deepCloneSession),
     ...(raw.workCalendar ? { workCalendar: deepCloneCalendar(raw.workCalendar as WorkCalendar) } : {}),
     ...(raw.annualPlanEntries ? { annualPlanEntries: (raw.annualPlanEntries as AnnualPlanEntry[]).map(deepCloneAnnualPlanEntry) } : {}),
+    ...(raw.teacherEvaluations ? { teacherEvaluations: (raw.teacherEvaluations as TeacherEvaluation[]).map(deepCloneTeacherEvaluation) } : {}),
   };
 
   return {
@@ -299,6 +399,11 @@ export function migrateData(raw: unknown): MigrationResult {
           return { status: "invalid_data", reason: "Invalid \x27annualPlanEntries\x27 in v1 data", raw };
         }
       }
+      if (raw.teacherEvaluations !== undefined && raw.teacherEvaluations !== null) {
+        if (!isValidTeacherEvaluationList(raw.teacherEvaluations)) {
+          return { status: "invalid_data", reason: "Invalid \x27teacherEvaluations\x27 in v1 data", raw };
+        }
+      }
 
       const result: AppData & { schemaVersion: 1 } = {
         ...raw,
@@ -307,6 +412,7 @@ export function migrateData(raw: unknown): MigrationResult {
         sessions: (raw.sessions as CheckSession[]).map(deepCloneSession),
         ...(raw.workCalendar ? { workCalendar: deepCloneCalendar(raw.workCalendar as WorkCalendar) } : {}),
         ...(raw.annualPlanEntries ? { annualPlanEntries: (raw.annualPlanEntries as AnnualPlanEntry[]).map(deepCloneAnnualPlanEntry) } : {}),
+        ...(raw.teacherEvaluations ? { teacherEvaluations: (raw.teacherEvaluations as TeacherEvaluation[]).map(deepCloneTeacherEvaluation) } : {}),
       };
 
       return {

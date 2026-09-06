@@ -8,7 +8,7 @@ export const BACKUP_KEY_PREFIX = "sinif-rota-backup-pre-migration-";
 export const QUARANTINE_KEY_PREFIX = "sinif-rota-corrupted-raw-";
 export const APP_DATA_LOCK_NAME = "sinif-rota-appdata-write";
 
-// Persisted fields: classes, sessions, workCalendar, annualPlanEntries, unknown fields
+// Persisted fields: classes, sessions, workCalendar, annualPlanEntries, teacherEvaluations, unknown fields
 
 export interface KeyValueStorage {
   getItem(key: string): string | null;

@@ -26,12 +26,26 @@ export interface AnnualPlanEntry {
   completed: boolean;
   [key: string]: unknown;
 }
+export type TeacherEvaluationScope = "student" | "class_general";
+export interface TeacherEvaluation {
+  id: string;
+  scope: TeacherEvaluationScope;
+  classId: string;
+  studentId?: string;
+  fromWeekStart: string;
+  toWeekStart: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: unknown;
+}
 export interface AppData {
   schemaVersion?: number;
   classes: SchoolClass[];
   sessions: CheckSession[];
   workCalendar?: WorkCalendar;
   annualPlanEntries?: AnnualPlanEntry[];
+  teacherEvaluations?: TeacherEvaluation[];
   [key: string]: unknown;
 }
 

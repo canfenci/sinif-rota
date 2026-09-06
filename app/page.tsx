@@ -5,7 +5,7 @@ import { Sheet } from "./components/Sheet";
 import { StatusSelector } from "./components/StatusSelector";
 import { StudentImport } from "./components/StudentImport";
 import { AnnualPlan } from "./components/AnnualPlan";
-import { ReportsView } from "./components/ReportsView";
+import { ReportsView, TEACHER_EVAL_UNSAVED_MESSAGE } from "./components/ReportsView";
 import { activeStudentCount, applyBulkStudentAction, classNameExists, createCheckSession, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
 import { emptyAppData } from "./lib/seed";
 import { checkTypes } from "./lib/stats";
@@ -18,6 +18,7 @@ import { createInitialCheckStatuses, getExistingVisitsForWeek, getNextVisitIndex
 import { resolveSessionWeekStart } from "./lib/session-week";
 import { buildPlanWeeks, isValidWorkCalendar } from "./lib/planning/calendar";
 import { formatWeekDateRange, getWeekDisplayEndDate } from "./components/AnnualPlan";
+import { deleteTeacherEvaluation, upsertTeacherEvaluation } from "./lib/teacher-evaluations";
 import type { AppData, CheckSession, CheckStatus, CheckType, SchoolClass, Student, WorkCalendar } from "./lib/types";
 
 type View = "home" | "classes" | "class" | "quick" | "student" | "import" | "plan" | "reports";
@@ -49,6 +50,7 @@ export default function Home() {
   const toastTimer = useRef<number | null>(null);
   const saveQueue = useRef<CoordinatedSaveQueue | null>(null);
   const skipHydrationSave = useRef(false);
+  const reportsEvalDirtyRef = useRef(false);
 
   useEffect(() => {
     console.info(`[Sınıf Rota] ${BUILD_INFO.display} (v${BUILD_INFO.version}) aktif.`);
@@ -119,7 +121,15 @@ export default function Home() {
   const calendarSchoolYear = workCalendar?.schoolYear ?? defaultCalendarResolution.schoolYear;
   const counts = useMemo(() => statuses ? Object.values(statuses).reduce((acc, value) => ({ ...acc, [value]: acc[value] + 1 }), { complete: 0, partial: 0, missing: 0, absent: 0 }) : null, [statuses]);
 
-  function navigate(next: View) { setView(next); if (next !== "quick") setStatuses(null); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function navigate(next: View) {
+    if (view === "reports" && next !== "reports" && reportsEvalDirtyRef.current) {
+      if (typeof window !== "undefined" && !window.confirm(TEACHER_EVAL_UNSAVED_MESSAGE)) {
+        return;
+      }
+      reportsEvalDirtyRef.current = false;
+    }
+    setView(next); if (next !== "quick") setStatuses(null); window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   function showToast(message: string, undo?: AppData) {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     setToast(message); setUndoSnapshot(undo ?? null);
@@ -448,6 +458,10 @@ export default function Home() {
         calendar={workCalendar ?? undefined}
         initialClassId={classId}
         initialStudentId={studentId}
+        teacherEvaluations={data.teacherEvaluations ?? []}
+        onUpsertTeacherEvaluation={(input) => setData((current) => upsertTeacherEvaluation(current, input))}
+        onDeleteTeacherEvaluation={(identity) => setData((current) => deleteTeacherEvaluation(current, identity))}
+        onEvaluationDirtyChange={(dirty) => { reportsEvalDirtyRef.current = dirty; }}
         onNavigateToClass={(id) => { setClassId(id); navigate("class"); }}
       />
     )}

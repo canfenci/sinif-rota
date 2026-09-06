@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { CheckSession, SchoolClass, WorkCalendar } from "../lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CheckSession, SchoolClass, TeacherEvaluation, WorkCalendar } from "../lib/types";
+import {
+  buildTeacherEvaluationId,
+  getTeacherEvaluation,
+  TEACHER_EVALUATION_TEXT_MAX_LENGTH,
+  type TeacherEvaluationIdentity,
+  type TeacherEvaluationUpsertInput,
+} from "../lib/teacher-evaluations";
 import { resolveSessionWeekStart } from "../lib/session-week";
 import { buildPlanWeeks, isValidWorkCalendar } from "../lib/planning/calendar";
 import { formatWeekDateRange } from "./AnnualPlan";
@@ -111,6 +118,126 @@ function RecommendationsSection({
   );
 }
 
+export const TEACHER_EVAL_UNSAVED_MESSAGE =
+  "Kaydedilmemiş öğretmen değerlendirmeniz var. Değişiklikleri kaydetmeden devam etmek istiyor musunuz?";
+
+interface TeacherEvaluationEditorProps {
+  identity: TeacherEvaluationIdentity;
+  persisted: TeacherEvaluation | null;
+  rangeLabel: string;
+  scopeDescription: string;
+  onSave: (identity: TeacherEvaluationIdentity, text: string) => void;
+  onDelete: (identity: TeacherEvaluationIdentity) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
+function formatEvaluationTimestamp(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+/**
+ * Öğretmen Değerlendirmesi düzenleyicisi (RAPOR-12).
+ * Explicit save only: textarea local draft'ta tutulur, typing AppData'yı değiştirmez.
+ * key={evaluationId} ile mount edildiği için context değişiminde eski draft
+ * başka bir identity'ye taşınmaz.
+ */
+function TeacherEvaluationEditor({
+  identity,
+  persisted,
+  rangeLabel,
+  scopeDescription,
+  onSave,
+  onDelete,
+  onDirtyChange,
+}: TeacherEvaluationEditorProps) {
+  const [draft, setDraft] = useState(persisted?.text ?? "");
+  const persistedText = persisted?.text ?? "";
+  const dirty = draft !== persistedText;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
+
+  const handleSave = () => {
+    if (!dirty) return;
+    onSave(identity, draft);
+  };
+
+  const handleDelete = () => {
+    if (!persisted) return;
+    if (typeof window !== "undefined" && !window.confirm("Bu değerlendirme notu silinsin mi?")) {
+      return;
+    }
+    setDraft("");
+    onDelete(identity);
+  };
+
+  return (
+    <div className="teacher-eval-section" role="region" aria-label="Öğretmen değerlendirmesi">
+      <div className="section-subheading">
+        <div>
+          <h3>Öğretmen Değerlendirmesi</h3>
+          <p className="section-subdesc">{scopeDescription}</p>
+        </div>
+        <span className="reports-range-tag">{rangeLabel}</span>
+      </div>
+
+      <label className="teacher-eval-label" htmlFor={`teacher-eval-${buildTeacherEvaluationId(identity)}`}>
+        <span>Değerlendirme notu</span>
+        <textarea
+          id={`teacher-eval-${buildTeacherEvaluationId(identity)}`}
+          className="teacher-eval-textarea"
+          rows={4}
+          maxLength={TEACHER_EVALUATION_TEXT_MAX_LENGTH}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Bu dönem için değerlendirmenizi yazın"
+        />
+      </label>
+
+      <div className="teacher-eval-meta">
+        <span className="teacher-eval-counter" aria-live="polite">
+          {draft.length}/{TEACHER_EVALUATION_TEXT_MAX_LENGTH} karakter
+        </span>
+        {dirty ? (
+          <span className="teacher-eval-dirty" role="status">
+            Kaydedilmemiş değişiklik
+          </span>
+        ) : persisted ? (
+          <span className="teacher-eval-saved" role="status">
+            Kaydedildi · Son güncelleme: {formatEvaluationTimestamp(persisted.updatedAt)}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="teacher-eval-actions">
+        <button
+          type="button"
+          className="primary-action"
+          onClick={handleSave}
+          disabled={!dirty}
+        >
+          Kaydet <span>→</span>
+        </button>
+        {persisted && (
+          <button type="button" className="danger-action" onClick={handleDelete}>
+            Notu Sil
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export type ReportTab = "general" | "classes" | "students" | "sessions";
 export type ReportRangePreset = "current_week" | "last_4_weeks" | "term" | "year";
 
@@ -120,6 +247,10 @@ export interface ReportsViewProps {
   calendar?: WorkCalendar;
   initialClassId?: string;
   initialStudentId?: string;
+  teacherEvaluations?: TeacherEvaluation[];
+  onUpsertTeacherEvaluation?: (input: TeacherEvaluationUpsertInput) => void;
+  onDeleteTeacherEvaluation?: (identity: TeacherEvaluationIdentity) => void;
+  onEvaluationDirtyChange?: (dirty: boolean) => void;
   onNavigateToClass?: (classId: string) => void;
 }
 
@@ -136,7 +267,46 @@ export function ReportsView({
   calendar,
   initialClassId,
   initialStudentId,
+  teacherEvaluations = [],
+  onUpsertTeacherEvaluation,
+  onDeleteTeacherEvaluation,
+  onEvaluationDirtyChange,
 }: ReportsViewProps) {
+  const evalDirtyRef = useRef(false);
+
+  const reportEvalDirtyChange = useCallback(
+    (dirty: boolean) => {
+      evalDirtyRef.current = dirty;
+      onEvaluationDirtyChange?.(dirty);
+    },
+    [onEvaluationDirtyChange]
+  );
+
+  useEffect(() => {
+    return () => {
+      evalDirtyRef.current = false;
+      onEvaluationDirtyChange?.(false);
+    };
+  }, [onEvaluationDirtyChange]);
+
+  /**
+   * Kaydedilmemiş öğretmen değerlendirmesi varken context değişimlerini
+   * hafif bir confirmation ile korur. İptal: mevcut context + draft korunur.
+   * Devam: draft discard edilir, hedef context açılır. Otomatik save yok.
+   */
+  const requestEvaluationContextChange = (apply: () => void): void => {
+    if (evalDirtyRef.current) {
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(TEACHER_EVAL_UNSAVED_MESSAGE)
+      ) {
+        return;
+      }
+      evalDirtyRef.current = false;
+      onEvaluationDirtyChange?.(false);
+    }
+    apply();
+  };
   const activeClasses = useMemo(() => classes.filter((c) => !c.archived), [classes]);
   const defaultClassId = initialClassId && classes.some((c) => c.id === initialClassId)
     ? initialClassId
@@ -171,16 +341,75 @@ export function ReportsView({
     return selectedClass.students.find((s) => s.id === selectedStudentId) ?? null;
   }, [selectedClass, selectedStudentId]);
 
-  // Sınıf değişimi
+  // Sınıf değişimi (dirty draft varsa guarded)
   const handleClassChange = (newClassId: string) => {
-    setSelectedClassId(newClassId);
-    setSelectedStudentId("");
+    requestEvaluationContextChange(() => {
+      setSelectedClassId(newClassId);
+      setSelectedStudentId("");
+    });
+  };
+
+  // Alt görünüm / öğrenci / aralık değişimleri (dirty draft varsa guarded)
+  const handleTabChange = (tab: ReportTab) => {
+    if (tab === activeTab) return;
+    requestEvaluationContextChange(() => setActiveTab(tab));
+  };
+
+  const handleStudentChange = (studentId: string) => {
+    requestEvaluationContextChange(() => setSelectedStudentId(studentId));
+  };
+
+  const handleRangePresetChange = (preset: ReportRangePreset) => {
+    if (preset === selectedRangePreset) return;
+    requestEvaluationContextChange(() => setSelectedRangePreset(preset));
   };
 
   // Rapor aralık nesnesi (fromWeekStart, toWeekStart)
   const reportRange = useMemo(() => {
     return resolveReportRange(selectedRangePreset, calendar);
   }, [selectedRangePreset, calendar]);
+
+  const evaluationRange =
+    reportRange.fromWeekStart && reportRange.toWeekStart
+      ? { fromWeekStart: reportRange.fromWeekStart, toWeekStart: reportRange.toWeekStart }
+      : null;
+
+  const studentEvaluationIdentity: TeacherEvaluationIdentity | null =
+    evaluationRange && selectedClass && selectedStudent
+      ? {
+          scope: "student",
+          classId: selectedClass.id,
+          studentId: selectedStudent.id,
+          fromWeekStart: evaluationRange.fromWeekStart,
+          toWeekStart: evaluationRange.toWeekStart,
+        }
+      : null;
+
+  const studentEvaluation = studentEvaluationIdentity
+    ? getTeacherEvaluation(teacherEvaluations, studentEvaluationIdentity)
+    : null;
+
+  const classGeneralEvaluationIdentity: TeacherEvaluationIdentity | null =
+    evaluationRange && selectedClass
+      ? {
+          scope: "class_general",
+          classId: selectedClass.id,
+          fromWeekStart: evaluationRange.fromWeekStart,
+          toWeekStart: evaluationRange.toWeekStart,
+        }
+      : null;
+
+  const classGeneralEvaluation = classGeneralEvaluationIdentity
+    ? getTeacherEvaluation(teacherEvaluations, classGeneralEvaluationIdentity)
+    : null;
+
+  const handleEvaluationSave = (identity: TeacherEvaluationIdentity, text: string) => {
+    onUpsertTeacherEvaluation?.({ ...identity, text });
+  };
+
+  const handleEvaluationDelete = (identity: TeacherEvaluationIdentity) => {
+    onDeleteTeacherEvaluation?.(identity);
+  };
 
   // Range bilgisi metni
   const rangeDisplayLabel = useMemo(() => {
@@ -315,7 +544,7 @@ export function ReportsView({
           aria-selected={activeTab === "general"}
           aria-controls="panel-general"
           className={`reports-tab-btn ${activeTab === "general" ? "active" : ""}`}
-          onClick={() => setActiveTab("general")}
+          onClick={() => handleTabChange("general")}
         >
           Genel
         </button>
@@ -325,7 +554,7 @@ export function ReportsView({
           aria-selected={activeTab === "classes"}
           aria-controls="panel-classes"
           className={`reports-tab-btn ${activeTab === "classes" ? "active" : ""}`}
-          onClick={() => setActiveTab("classes")}
+          onClick={() => handleTabChange("classes")}
         >
           Sınıflar
         </button>
@@ -335,7 +564,7 @@ export function ReportsView({
           aria-selected={activeTab === "students"}
           aria-controls="panel-students"
           className={`reports-tab-btn ${activeTab === "students" ? "active" : ""}`}
-          onClick={() => setActiveTab("students")}
+          onClick={() => handleTabChange("students")}
         >
           Öğrenciler
         </button>
@@ -345,7 +574,7 @@ export function ReportsView({
           aria-selected={activeTab === "sessions"}
           aria-controls="panel-sessions"
           className={`reports-tab-btn ${activeTab === "sessions" ? "active" : ""}`}
-          onClick={() => setActiveTab("sessions")}
+          onClick={() => handleTabChange("sessions")}
         >
           Kayıtlar
         </button>
@@ -359,7 +588,7 @@ export function ReportsView({
               key={preset}
               type="button"
               className={`range-preset-pill ${selectedRangePreset === preset ? "selected" : ""}`}
-              onClick={() => setSelectedRangePreset(preset)}
+              onClick={() => handleRangePresetChange(preset)}
             >
               {REPORT_RANGE_LABELS[preset]}
             </button>
@@ -762,6 +991,20 @@ export function ReportsView({
                             )}
                           </>
                         )}
+
+                        {/* Sınıf Genel Öğretmen Değerlendirmesi (RAPOR-12, teacher-authored, class_general only) */}
+                        {classGeneralEvaluationIdentity && (
+                          <TeacherEvaluationEditor
+                            key={buildTeacherEvaluationId(classGeneralEvaluationIdentity)}
+                            identity={classGeneralEvaluationIdentity}
+                            persisted={classGeneralEvaluation}
+                            rangeLabel={rangeDisplayLabel}
+                            scopeDescription="Yalnız bu sınıf ve seçili dönem için saklanan sınıf geneli değerlendirme. Otomatik önerilerden ayrıdır; öğrenci değerlendirmeleri burada görünmez."
+                            onSave={handleEvaluationSave}
+                            onDelete={handleEvaluationDelete}
+                            onDirtyChange={reportEvalDirtyChange}
+                          />
+                        )}
                       </div>
                     </div>
                   )}
@@ -998,7 +1241,7 @@ export function ReportsView({
                   <select
                     id="student-report-student-select"
                     value={selectedStudentId}
-                    onChange={(e) => setSelectedStudentId(e.target.value)}
+                    onChange={(e) => handleStudentChange(e.target.value)}
                   >
                     <option value="">Öğrenci seçin...</option>
                     {selectedClass?.students.map((s) => (
@@ -1126,6 +1369,20 @@ export function ReportsView({
                           subtitle="Öğrencinin kontrol kayıtlarına dayalı çalışma ve hazırlık önerileri."
                           summary={studentRecommendations.summary}
                           recommendations={studentRecommendations.recommendations}
+                        />
+                      )}
+
+                      {/* 4b. Öğretmen Değerlendirmesi (RAPOR-12, teacher-authored) */}
+                      {studentEvaluationIdentity && (
+                        <TeacherEvaluationEditor
+                          key={buildTeacherEvaluationId(studentEvaluationIdentity)}
+                          identity={studentEvaluationIdentity}
+                          persisted={studentEvaluation}
+                          rangeLabel={rangeDisplayLabel}
+                          scopeDescription="Yalnız bu öğrenci ve seçili dönem için saklanır. Otomatik önerilerden ayrıdır."
+                          onSave={handleEvaluationSave}
+                          onDelete={handleEvaluationDelete}
+                          onDirtyChange={reportEvalDirtyChange}
                         />
                       )}
 

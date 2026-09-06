@@ -28,6 +28,7 @@ export function removeClass(data: AppData, classId: string): AppData {
     classes: data.classes.filter((item) => item.id !== classId),
     sessions: data.sessions.filter((session) => session.classId !== classId),
     annualPlanEntries: data.annualPlanEntries?.filter((entry) => entry.classId !== classId),
+    teacherEvaluations: data.teacherEvaluations?.filter((entry) => entry.classId !== classId),
   };
 }
 
@@ -44,6 +45,9 @@ export function removeStudent(data: AppData, classId: string, studentId: string)
       void _removed;
       return { ...session, statuses };
     }),
+    teacherEvaluations: data.teacherEvaluations?.filter(
+      (entry) => !(entry.scope === "student" && entry.classId === classId && entry.studentId === studentId)
+    ),
   };
 }
 
