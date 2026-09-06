@@ -21,10 +21,22 @@ export function isGrade8Class(name: string) {
   return /^8(?:\s*[-/.]\s*|\s+|$)/i.test(name.trim());
 }
 
-export function buildSciencePlanForClass(className: string, calendar: WorkCalendar): SciencePlan | null {
-  if (isGrade5Class(className)) return buildGrade5SciencePlan(calendar);
-  if (isGrade6Class(className)) return buildGrade6SciencePlan(calendar);
-  if (isGrade7Class(className)) return buildGrade7SciencePlan(calendar);
-  if (isGrade8Class(className)) return buildGrade8SciencePlan(calendar);
+export type ClassGrade = 5 | 6 | 7 | 8;
+
+export function detectClassGrade(name: string): ClassGrade | null {
+  if (isGrade5Class(name)) return 5;
+  if (isGrade6Class(name)) return 6;
+  if (isGrade7Class(name)) return 7;
+  if (isGrade8Class(name)) return 8;
   return null;
+}
+
+export function buildSciencePlanForClass(className: string, calendar: WorkCalendar): SciencePlan | null {
+  switch (detectClassGrade(className)) {
+    case 5: return buildGrade5SciencePlan(calendar);
+    case 6: return buildGrade6SciencePlan(calendar);
+    case 7: return buildGrade7SciencePlan(calendar);
+    case 8: return buildGrade8SciencePlan(calendar);
+    default: return null;
+  }
 }
