@@ -207,3 +207,26 @@ test("22. ReportsView modülü beklenen türleri ve bileşeni export eder", asyn
   assert.equal(reportsViewMod.REPORT_RANGE_LABELS.current_week, "Bu Hafta");
   assert.equal(reportsViewMod.REPORT_RANGE_LABELS.last_4_weeks, "Son 4 Hafta");
 });
+
+// 23. Bottom nav sırası: Ana Sayfa, Sınıflar, Raporlar, Yıllık Plan
+test("23. Bottom nav tam 4 item ve doğru sıradadır", () => {
+  const navBlock = pageSource.slice(
+    pageSource.indexOf('<nav className="bottom-nav"'),
+    pageSource.indexOf("</nav>", pageSource.indexOf('<nav className="bottom-nav"'))
+  );
+  const labels = [...navBlock.matchAll(/>([^<>]+)<\/button>/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ["Ana Sayfa", "Sınıflar", "Raporlar", "Yıllık Plan"]);
+});
+
+// 24. Active state eşleşmesi: her view kendi nav item'ını aktif eder
+test("24. Bottom nav active state her view için doğrudur", () => {
+  assert.match(pageSource, /className=\{view === "home" \? "nav-active" : ""\} onClick=\{\(\) => navigate\("home"\)\}>Ana Sayfa/);
+  assert.match(pageSource, /className=\{view === "classes" \|\| view === "class" \? "nav-active" : ""\} onClick=\{\(\) => navigate\("classes"\)\}>Sınıflar/);
+  assert.match(pageSource, /className=\{view === "reports" \? "nav-active" : ""\} onClick=\{\(\) => navigate\("reports"\)\}>Raporlar/);
+  assert.match(pageSource, /className=\{view === "plan" \? "nav-active" : ""\} onClick=\{\(\) => navigate\("plan"\)\}>Yıllık Plan/);
+});
+
+// 25. Bottom nav'dan çıkış dirty teacher evaluation guard'ını bypass etmez
+test("25. Bottom nav geçişleri dirty guard koruması altındadır", () => {
+  assert.match(pageSource, /view === "reports" && next !== "reports" && reportsEvalDirtyRef\.current/);
+});
