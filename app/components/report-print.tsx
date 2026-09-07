@@ -7,6 +7,7 @@ import {
   PARTICIPATION_COPY,
   roundScore,
   type ClassComparisonReportDTO,
+  type ClassComparisonStudentRow,
   type ClassGeneralReportDTO,
   type StudentReportCoreDTO,
 } from "../lib/reports";
@@ -47,6 +48,14 @@ export interface ClassComparisonPrintSnapshot {
   generatedAt: string;
 }
 
+export interface ClassGeneralStudentSummaryRow {
+  studentId: string;
+  studentNumber: number;
+  studentName: string;
+  typeScores: Record<CheckType, number | null>;
+  suggestedParticipationScore: number | null;
+}
+
 export interface ClassGeneralPrintSnapshot {
   kind: "class-general";
   className: string;
@@ -55,6 +64,8 @@ export interface ClassGeneralPrintSnapshot {
   recommendations: ClassGeneralRecommendationReport;
   evaluationText: string | null;
   weekTitles: Record<string, string>;
+  includeStudentSummary: boolean;
+  studentSummary?: ClassGeneralStudentSummaryRow[];
   generatedAt: string;
 }
 
@@ -99,9 +110,28 @@ export function buildClassGeneralPrintSnapshot(args: {
   recommendations: ClassGeneralRecommendationReport;
   evaluationText: string | null;
   weekTitles: Record<string, string>;
+  includeStudentSummary: boolean;
+  studentSummary?: ClassGeneralStudentSummaryRow[];
   generatedAt: string;
 }): ClassGeneralPrintSnapshot {
   return { kind: "class-general", ...args };
+}
+
+/**
+ * Karşılaştırma DTO satırlarından print'e özel öğrenci özeti üretir.
+ * Yalnız primitive alanları taşır; yeni istatistik formülü içermez,
+ * suggested score'u aynen korur (insufficient ise null kalır).
+ */
+export function toClassGeneralStudentSummaryRows(
+  rows: ClassComparisonStudentRow[]
+): ClassGeneralStudentSummaryRow[] {
+  return rows.map((row) => ({
+    studentId: row.studentId,
+    studentNumber: row.studentNumber,
+    studentName: row.studentName,
+    typeScores: { ...row.typeScores },
+    suggestedParticipationScore: row.suggestedParticipationScore,
+  }));
 }
 
 export function formatPrintTimestamp(value: string): string {
@@ -470,6 +500,47 @@ export function ClassGeneralPrintView({ snapshot }: { snapshot: ClassGeneralPrin
           </table>
         )}
       </section>
+
+      {snapshot.includeStudentSummary && snapshot.studentSummary && (
+        <section className="report-print-block" aria-label="Öğrenci özeti">
+          <h2 className="report-print-h2">Öğrenci Özeti</h2>
+          <p className="report-print-desc">Bu bölüm yalnız öğretmen içi kullanım içindir.</p>
+          {snapshot.studentSummary.length === 0 ? (
+            <p className="report-print-empty">Bu sınıfta listelenecek öğrenci bulunmuyor.</p>
+          ) : (
+            <table className="report-print-table">
+              <thead>
+                <tr>
+                  <th scope="col">No</th>
+                  <th scope="col">Öğrenci</th>
+                  {ALL_CHECK_TYPES.map((type) => (
+                    <th scope="col" key={type}>
+                      {type}
+                    </th>
+                  ))}
+                  <th scope="col">Derse Katılım</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshot.studentSummary.map((row) => (
+                  <tr key={row.studentId}>
+                    <td>{row.studentNumber}</td>
+                    <th scope="row">{row.studentName}</th>
+                    {ALL_CHECK_TYPES.map((type) => (
+                      <td key={type}>{formatScore(row.typeScores[type] ?? null)}</td>
+                    ))}
+                    <td>
+                      {row.suggestedParticipationScore !== null
+                        ? row.suggestedParticipationScore
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
     </ReportPrintShell>
   );
 }

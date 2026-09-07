@@ -39,6 +39,7 @@ import {
   buildClassGeneralPrintSnapshot,
   buildStudentPrintSnapshot,
   ReportPrintJobView,
+  toClassGeneralStudentSummaryRows,
   type ReportPrintJob,
 } from "./report-print";
 import {
@@ -531,6 +532,7 @@ export function ReportsView({
   const [printKind, setPrintKind] = useState<"student" | "comparison" | "class-general" | null>(null);
   const [printTicket, setPrintTicket] = useState(0);
   const [printStamp, setPrintStamp] = useState("");
+  const [includeStudentSummary, setIncludeStudentSummary] = useState(false);
 
   const printWeekTitles = useMemo(() => {
     const titles: Record<string, string> = {};
@@ -581,6 +583,10 @@ export function ReportsView({
       recommendations: classGeneralRecommendations,
       evaluationText: classGeneralEvalText,
       weekTitles: printWeekTitles,
+      includeStudentSummary,
+      ...(includeStudentSummary && comparisonReport
+        ? { studentSummary: toClassGeneralStudentSummaryRows(comparisonReport.rows) }
+        : {}),
       generatedAt,
     });
   })();
@@ -999,6 +1005,14 @@ export function ReportsView({
                           >
                             Yazdır / PDF
                           </button>
+                          <label className="report-print-check">
+                            <input
+                              type="checkbox"
+                              checked={includeStudentSummary}
+                              onChange={(event) => setIncludeStudentSummary(event.target.checked)}
+                            />
+                            Öğrenci listesini dahil et
+                          </label>
                           <p className="report-print-hint">Yazdırma ekranından PDF olarak kaydedebilirsiniz.</p>
                           {printNotice && (
                             <p className="report-print-notice" role="status">

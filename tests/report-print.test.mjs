@@ -233,6 +233,21 @@ function generalSnapshot() {
     recommendations: classRecommendations(),
     evaluationText: "Sınıf geneli notu.",
     weekTitles: WEEK_TITLES,
+    includeStudentSummary: false,
+    generatedAt: GENERATED_AT,
+  });
+}
+
+function generalSnapshotWithStudents() {
+  return printMod.buildClassGeneralPrintSnapshot({
+    className: "5-A",
+    rangeLabel: "Son 4 Hafta",
+    report: generalReport(),
+    recommendations: classRecommendations(),
+    evaluationText: "Sınıf geneli notu.",
+    weekTitles: WEEK_TITLES,
+    includeStudentSummary: true,
+    studentSummary: printMod.toClassGeneralStudentSummaryRows(comparisonReport().rows),
     generatedAt: GENERATED_AT,
   });
 }
@@ -602,4 +617,94 @@ test("60. print components are presentation-only exports", () => {
   assert.equal(typeof printMod.buildClassComparisonPrintSnapshot, "function");
   assert.equal(typeof printMod.buildClassGeneralPrintSnapshot, "function");
   assert.equal(typeof printMod.formatPrintTimestamp, "function");
+});
+
+test("61. default off keeps student summary out of the snapshot", () => {
+  const snap = generalSnapshot();
+  assert.equal(snap.includeStudentSummary, false);
+  assert.ok(!("studentSummary" in snap));
+});
+
+test("62. checkbox off keeps student names out of class general print", () => {
+  const serialized = JSON.stringify(generalSnapshot());
+  assert.ok(!serialized.includes("Ali Veli"));
+  assert.ok(!serialized.includes("Ayşe Yılmaz"));
+  assert.ok(printSource.includes("snapshot.includeStudentSummary && snapshot.studentSummary"));
+});
+
+test("63. checkbox on includes selected class students", () => {
+  const serialized = JSON.stringify(generalSnapshotWithStudents());
+  assert.ok(serialized.includes("Ali Veli"));
+  assert.ok(serialized.includes("Ayşe Yılmaz"));
+  assert.ok(printSource.includes("Öğrenci Özeti"));
+});
+
+test("64. foreign class students never leak into the summary", () => {
+  const rows = printMod.toClassGeneralStudentSummaryRows(comparisonReport().rows);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((row) => ["s1", "s2"].includes(row.studentId)));
+  assert.ok(!JSON.stringify(rows).includes("Mehmet"));
+});
+
+test("65. student number and name match", () => {
+  const rows = printMod.toClassGeneralStudentSummaryRows(comparisonReport().rows);
+  const ali = rows.find((row) => row.studentId === "s1");
+  assert.equal(ali.studentNumber, 3);
+  assert.equal(ali.studentName, "Ali Veli");
+  assert.equal(ali.typeScores["Ödev"], 80);
+  assert.equal(ali.suggestedParticipationScore, 77);
+});
+
+test("66. missing metrics stay null for the print view", () => {
+  const rows = printMod.toClassGeneralStudentSummaryRows(comparisonReport().rows);
+  const ayse = rows.find((row) => row.studentId === "s2");
+  assert.equal(ayse.typeScores["Ödev"], null);
+  assert.equal(ayse.suggestedParticipationScore, null);
+  assert.ok(printSource.includes("formatScore(row.typeScores[type] ?? null)"));
+});
+
+test("67. insufficient participation never fabricates a score", () => {
+  const rows = printMod.toClassGeneralStudentSummaryRows(comparisonReport().rows);
+  const ayse = rows.find((row) => row.studentId === "s2");
+  assert.equal(ayse.suggestedParticipationScore, null);
+});
+
+test("68. checkbox preference is never persisted", () => {
+  assert.ok(reportsViewSource.includes("useState(false)"));
+  assert.ok(!/localStorage|saveSafe|setItem/.test(printSource));
+  const flagLines = reportsViewSource.split("\n").filter((line) => line.includes("includeStudentSummary"));
+  assert.ok(flagLines.length > 0);
+  assert.ok(!flagLines.some((line) => /localStorage|AppData|saveSafe/.test(line)));
+});
+
+test("69. class general DTO stays PII-free", () => {
+  const dto = reportsMod.calculateClassGeneralReport(
+    { id: "c1", name: "5-A", students: [{ id: "s1", name: "Ali Veli", number: 3 }] },
+    [],
+    { range: {} }
+  );
+  const serialized = JSON.stringify(dto);
+  assert.ok(!serialized.includes("studentId"));
+  assert.ok(!serialized.includes("studentName"));
+  assert.ok(!serialized.includes("studentNumber"));
+  assert.ok(!serialized.includes("Ali Veli"));
+});
+
+test("70. student and comparison snapshots stay unchanged", () => {
+  assert.ok(!("includeStudentSummary" in studentSnapshot()));
+  assert.ok(!("includeStudentSummary" in comparisonSnapshot()));
+  assert.ok(!("studentSummary" in studentSnapshot()));
+  assert.ok(!("studentSummary" in comparisonSnapshot()));
+});
+
+test("71. dirty guard still protects class general print", () => {
+  const handlerBlock = reportsViewSource.slice(reportsViewSource.indexOf("const handlePrintClassGeneral"));
+  assert.ok(handlerBlock.startsWith("const handlePrintClassGeneral = () => {\n    if (!generalReport"));
+  assert.ok(reportsViewSource.includes("requestPrint(\"class-general\")"));
+});
+
+test("72. no PDF dependency, Blob, File, or share in print flow", () => {
+  assert.ok(!/react-pdf|jspdf|jsPDF|html2canvas|pdf-lib|pdfjs/.test(printSource));
+  assert.ok(!/new Blob|new File\(|URL\.createObjectURL|navigator\.share|canShare/.test(printSource));
+  assert.ok(!/new Blob|new File\(|URL\.createObjectURL|navigator\.share|canShare/.test(reportsViewSource));
 });
