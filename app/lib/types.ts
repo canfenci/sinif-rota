@@ -39,6 +39,14 @@ export interface TeacherEvaluation {
   updatedAt: string;
   [key: string]: unknown;
 }
+export type ScheduleWeekday = 1 | 2 | 3 | 4 | 5;
+export interface WeeklyScheduleEntry {
+  id: string;
+  classId: string;
+  weekday: ScheduleWeekday;
+  lessonNumber: number;
+  [key: string]: unknown;
+}
 export interface AppData {
   schemaVersion?: number;
   classes: SchoolClass[];
@@ -46,6 +54,7 @@ export interface AppData {
   workCalendar?: WorkCalendar;
   annualPlanEntries?: AnnualPlanEntry[];
   teacherEvaluations?: TeacherEvaluation[];
+  weeklySchedule?: WeeklyScheduleEntry[];
   [key: string]: unknown;
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Sheet } from "./components/Sheet";
 import { StatusSelector } from "./components/StatusSelector";
 import { StudentImport } from "./components/StudentImport";
+import { ScheduleView } from "./components/ScheduleView";
 import { AnnualPlan } from "./components/AnnualPlan";
 import { ReportsView, TEACHER_EVAL_UNSAVED_MESSAGE } from "./components/ReportsView";
 import { activeStudentCount, applyBulkStudentAction, classNameExists, createCheckSession, duplicateClass, nextStudentNumber, removeClass, removeStudent, renameClass, studentNumberExists, transferConflicts, type BulkStudentAction } from "./lib/data";
@@ -19,9 +20,10 @@ import { resolveSessionWeekStart } from "./lib/session-week";
 import { buildPlanWeeks, isValidWorkCalendar } from "./lib/planning/calendar";
 import { formatWeekDateRange, getWeekDisplayEndDate } from "./components/AnnualPlan";
 import { deleteTeacherEvaluation, upsertTeacherEvaluation } from "./lib/teacher-evaluations";
-import type { AppData, CheckSession, CheckStatus, CheckType, SchoolClass, Student, WorkCalendar } from "./lib/types";
+import { addWeeklyScheduleEntry, deleteWeeklyScheduleEntry, formatLessonLabel, resolveTodayLessons, updateWeeklyScheduleEntry, useClientWeekday, WEEKDAY_LABELS } from "./lib/weekly-schedule";
+import type { AppData, CheckSession, CheckStatus, CheckType, ScheduleWeekday, SchoolClass, Student, WeeklyScheduleEntry, WorkCalendar } from "./lib/types";
 
-type View = "home" | "classes" | "class" | "quick" | "student" | "import" | "plan" | "reports";
+type View = "home" | "classes" | "class" | "quick" | "student" | "import" | "plan" | "reports" | "schedule";
 type EditTarget = { kind: "class"; item?: SchoolClass } | { kind: "student"; item?: Student };
 type BulkRequest = { action: BulkStudentAction; studentIds: string[] };
 type WriteBlock = "conflict" | "coordination_unavailable";
@@ -269,6 +271,19 @@ export default function Home() {
     const labels: Record<BulkStudentAction, string> = { delete: "silindi", activate: "aktif yapıldı", deactivate: "pasif yapıldı", move: "taşındı", copy: "kopyalandı" };
     showToast(`${result.processed} öğrenci ${labels[bulkRequest.action]}${result.skipped ? ` · ${result.skipped} atlandı` : ""}`, before);
   }
+  function addScheduleEntry(input: { classId: string; weekday: ScheduleWeekday; lessonNumber: number }) {
+    const id = crypto.randomUUID();
+    setData((current) => addWeeklyScheduleEntry(current, input, () => id));
+    showToast("Ders programına eklendi");
+  }
+  function updateScheduleEntry(id: string, patch: { classId: string; weekday: ScheduleWeekday; lessonNumber: number }) {
+    setData((current) => updateWeeklyScheduleEntry(current, id, patch));
+    showToast("Ders kaydı güncellendi");
+  }
+  function deleteScheduleEntry(id: string) {
+    setData((current) => deleteWeeklyScheduleEntry(current, id));
+    showToast("Ders kaydı silindi");
+  }
   function duplicateSelectedClass() {
     if (editTarget?.kind !== "class" || !editTarget.item) return;
     const before = data;
@@ -425,8 +440,9 @@ export default function Home() {
         <span>⚠️ {saveWarning}</span>
       </div>
     )}
-    {view === "home" && <HomeView classes={activeClasses} recent={recent} onQuick={() => navigate("quick")} onClass={(id) => { setClassId(id); navigate("class"); }} />}
-    {view === "classes" && <ClassesView classes={data.classes} onAdd={() => openEdit({ kind: "class" })} onOpen={(id) => { setClassId(id); navigate("class"); }} onEdit={(item) => openEdit({ kind: "class", item })} />}
+    {view === "home" && <HomeView classes={activeClasses} schedule={data.weeklySchedule ?? []} recent={recent} onQuick={() => navigate("quick")} onClass={(id) => { setClassId(id); navigate("class"); }} />}
+    {view === "classes" && <ClassesView classes={data.classes} onAdd={() => openEdit({ kind: "class" })} onOpen={(id) => { setClassId(id); navigate("class"); }} onEdit={(item) => openEdit({ kind: "class", item })} onSchedule={() => navigate("schedule")} />}
+    {view === "schedule" && <ScheduleView classes={data.classes} entries={data.weeklySchedule ?? []} onBack={() => navigate("classes")} onAdd={addScheduleEntry} onUpdate={updateScheduleEntry} onDelete={deleteScheduleEntry} />}
     {view === "class" && schoolClass && <ClassView key={`${schoolClass.id}-${bulkVersion}`} item={schoolClass} onBack={() => navigate("classes")} onQuick={() => navigate("quick")} onAdd={() => openEdit({ kind: "student" })} onImport={() => navigate("import")} onBulk={(action, studentIds) => setBulkRequest({ action, studentIds })} onOpen={(id) => { setStudentId(id); navigate("student"); }} onEdit={(item) => openEdit({ kind: "student", item })} />}
     {view === "quick" && (
       <QuickView
@@ -487,16 +503,23 @@ function AppHeader({ eyebrow, title, back }: { eyebrow: string; title: string; b
   return <header className="page-header">{back ? <button className="back-button" onClick={back} aria-label="Geri">←</button> : <div className="brand-mark" aria-label="Sınıf Rota">SR</div>}<div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1></div></header>;
 }
 
-function HomeView({ classes, recent, onQuick, onClass }: { classes: SchoolClass[]; recent: AppData["sessions"]; onQuick: () => void; onClass: (id: string) => void }) {
+function HomeView({ classes, schedule, recent, onQuick, onClass }: { classes: SchoolClass[]; schedule: WeeklyScheduleEntry[]; recent: AppData["sessions"]; onQuick: () => void; onClass: (id: string) => void }) {
   const greeting = useGreeting();
   const date = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long", timeZone: "Europe/Istanbul" }).format(new Date());
-  return <><AppHeader eyebrow={date.toLocaleUpperCase("tr-TR")} title={greeting} /><section className="hero"><p className="kicker">GÜNLÜK TAKİP</p><h2>Sınıf kontrolüne<br />hemen başlayın.</h2><p className="hero-desc">Ödev, defter, kitap veya materyal kontrolü yap.</p><button className="primary-action" onClick={onQuick}>Hızlı Kontrol <span>→</span></button></section><section className="content-section"><div className="section-heading"><div><p className="kicker">SINIFLAR</p><h3>Bugün nereden devam?</h3></div></div>{classes.length ? <div className="class-list home-class-list">{classes.slice(0, 3).map((item) => { const grade = detectClassGrade(item.name); const gradeClass = grade ? ` grade-${grade}` : ""; return <button className={`class-row home-class-card${gradeClass}`} key={item.id} onClick={() => onClass(item.id)}><span className="class-grade-badge">{grade ?? "SR"}</span><span><span className="class-name">{item.name}</span><span className="class-meta">{activeStudentCount(item)} aktif öğrenci</span></span><span className="arrow">→</span></button>; })}</div> : <EmptyState title="Henüz sınıf yok" text="Sınıflar bölümünden ilk sınıfınızı ekleyin." />}</section>{recent.length > 0 && <section className="content-section compact"><p className="kicker">SON KONTROLLER</p>{recent.map((item) => <div className="recent-row" key={item.id}><strong>{item.className}</strong><span>{item.type}</span><time dateTime={item.date}>{new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "short" }).format(new Date(item.date))}</time></div>)}</section>}<footer className="app-footer" role="contentinfo"><p>Sınıf Rota · {BUILD_INFO.display}</p></footer></>;
+  return <><AppHeader eyebrow={date.toLocaleUpperCase("tr-TR")} title={greeting} /><section className="hero"><p className="kicker">GÜNLÜK TAKİP</p><h2>Sınıf kontrolüne<br />hemen başlayın.</h2><p className="hero-desc">Ödev, defter, kitap veya materyal kontrolü yap.</p><button className="primary-action" onClick={onQuick}>Hızlı Kontrol <span>→</span></button></section><TodayLessons classes={classes} schedule={schedule} onClass={onClass} /><section className="content-section"><div className="section-heading"><div><p className="kicker">SINIFLAR</p><h3>Bugün nereden devam?</h3></div></div>{classes.length ? <div className="class-list home-class-list">{classes.slice(0, 3).map((item) => { const grade = detectClassGrade(item.name); const gradeClass = grade ? ` grade-${grade}` : ""; return <button className={`class-row home-class-card${gradeClass}`} key={item.id} onClick={() => onClass(item.id)}><span className="class-grade-badge">{grade ?? "SR"}</span><span><span className="class-name">{item.name}</span><span className="class-meta">{activeStudentCount(item)} aktif öğrenci</span></span><span className="arrow">→</span></button>; })}</div> : <EmptyState title="Henüz sınıf yok" text="Sınıflar bölümünden ilk sınıfınızı ekleyin." />}</section>{recent.length > 0 && <section className="content-section compact"><p className="kicker">SON KONTROLLER</p>{recent.map((item) => <div className="recent-row" key={item.id}><strong>{item.className}</strong><span>{item.type}</span><time dateTime={item.date}>{new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "short" }).format(new Date(item.date))}</time></div>)}</section>}<footer className="app-footer" role="contentinfo"><p>Sınıf Rota · {BUILD_INFO.display}</p></footer></>;
 }
 
-function ClassesView({ classes, onAdd, onOpen, onEdit }: { classes: SchoolClass[]; onAdd: () => void; onOpen: (id: string) => void; onEdit: (item: SchoolClass) => void }) {
+function TodayLessons({ classes, schedule, onClass }: { classes: SchoolClass[]; schedule: WeeklyScheduleEntry[]; onClass: (id: string) => void }) {
+  const weekday = useClientWeekday();
+  const lessons = resolveTodayLessons(schedule, classes, weekday);
+  const title = weekday === null ? "Hafta Sonu" : WEEKDAY_LABELS[weekday];
+  return <section className="content-section" aria-label="Bugünün dersleri"><div className="section-heading"><div><p className="kicker">BUGÜNÜN DERSLERİ</p><h3>{title}</h3></div></div>{lessons.length ? <div className="class-list home-class-list today-lessons">{lessons.map(({ entry, schoolClass }) => { const grade = detectClassGrade(schoolClass.name); const gradeClass = grade ? ` grade-${grade}` : ""; return <button className={`class-row home-class-card today-lesson${gradeClass}`} key={entry.id} onClick={() => onClass(schoolClass.id)}><span className="class-grade-badge">{entry.lessonNumber}</span><span><span className="class-name">{formatLessonLabel(entry.lessonNumber)} · {schoolClass.name}</span><span className="class-meta">{activeStudentCount(schoolClass)} öğrenci</span></span><span className="arrow">→</span></button>; })}</div> : <EmptyState title="Bugün planlanmış ders yok." text={weekday === null ? "Hafta sonu dinlenme zamanı." : "Bu güne henüz ders eklenmedi. Ders Programı bölümünden ekleyebilirsiniz."} />}</section>;
+}
+
+function ClassesView({ classes, onAdd, onOpen, onEdit, onSchedule }: { classes: SchoolClass[]; onAdd: () => void; onOpen: (id: string) => void; onEdit: (item: SchoolClass) => void; onSchedule: () => void }) {
   const active = classes.filter((item) => !item.archived); const archived = classes.filter((item) => item.archived);
   const rows = (items: SchoolClass[]) => <div className="class-list management-list">{items.map((item) => <div className="class-row-wrap" key={item.id}><button className="class-row" onClick={() => onOpen(item.id)}><span className="class-name">{item.name}</span><span className="class-meta">{activeStudentCount(item)} aktif · {item.students.length} toplam</span><span className="arrow">→</span></button><button className="row-edit" onClick={() => onEdit(item)} aria-label={`${item.name} sınıfını düzenle`}>•••</button></div>)}</div>;
-  return <><AppHeader eyebrow="SINIF YÖNETİMİ" title="Sınıflar" /><div className="title-action"><p>{active.length} aktif sınıf · {active.reduce((sum, item) => sum + activeStudentCount(item), 0)} öğrenci</p><button onClick={onAdd}>+ Sınıf ekle</button></div>{active.length ? rows(active) : <EmptyState title="Aktif sınıf yok" text="Yeni bir sınıf oluşturabilir veya arşivden çıkarabilirsiniz." />}{archived.length > 0 && <section className="archived-classes"><p className="kicker">ARŞİVLENEN SINIFLAR · {archived.length}</p>{rows(archived)}</section>}</>;
+  return <><AppHeader eyebrow="SINIF YÖNETİMİ" title="Sınıflar" /><div className="title-action"><p>{active.length} aktif sınıf · {active.reduce((sum, item) => sum + activeStudentCount(item), 0)} öğrenci</p><div className="title-action-buttons"><button className="secondary-action" onClick={onSchedule}>Ders Programı</button><button onClick={onAdd}>+ Sınıf ekle</button></div></div>{active.length ? rows(active) : <EmptyState title="Aktif sınıf yok" text="Yeni bir sınıf oluşturabilir veya arşivden çıkarabilirsiniz." />}{archived.length > 0 && <section className="archived-classes"><p className="kicker">ARŞİVLENEN SINIFLAR · {archived.length}</p>{rows(archived)}</section>}</>;
 }
 
 function ClassView({ item, onBack, onQuick, onAdd, onImport, onBulk, onOpen, onEdit }: { item: SchoolClass; onBack: () => void; onQuick: () => void; onAdd: () => void; onImport: () => void; onBulk: (action: BulkStudentAction, ids: string[]) => void; onOpen: (id: string) => void; onEdit: (item: Student) => void }) {

@@ -1,4 +1,4 @@
-import type { AnnualPlanEntry, AppData, CalendarBreak, CheckSession, CheckStatus, CheckType, SchoolClass, Student, TeacherEvaluation, WorkCalendar } from "./types";
+import type { AnnualPlanEntry, AppData, CalendarBreak, CheckSession, CheckStatus, CheckType, SchoolClass, Student, TeacherEvaluation, WeeklyScheduleEntry, WorkCalendar } from "./types";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -179,6 +179,27 @@ function isValidTeacherEvaluation(entry: unknown): entry is TeacherEvaluation {
   return true;
 }
 
+function isValidWeeklyScheduleEntry(entry: unknown): entry is WeeklyScheduleEntry {
+  if (!isPlainObject(entry)) return false;
+  if (typeof entry.id !== "string" || entry.id.trim() === "") return false;
+  if (typeof entry.classId !== "string" || entry.classId.trim() === "") return false;
+  if (typeof entry.weekday !== "number" || !Number.isInteger(entry.weekday) || entry.weekday < 1 || entry.weekday > 5) return false;
+  if (typeof entry.lessonNumber !== "number" || !Number.isInteger(entry.lessonNumber) || entry.lessonNumber < 1) return false;
+  return true;
+}
+
+function isValidWeeklyScheduleList(entries: unknown): entries is WeeklyScheduleEntry[] {
+  if (!Array.isArray(entries)) return false;
+  if (!entries.every(isValidWeeklyScheduleEntry)) return false;
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    const key = `${entry.weekday}:${entry.lessonNumber}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+  }
+  return true;
+}
+
 function isValidTeacherEvaluationList(entries: unknown): entries is TeacherEvaluation[] {
   if (!Array.isArray(entries)) return false;
   const seenIds = new Set<string>();
@@ -255,6 +276,16 @@ function deepCloneAnnualPlanEntry(entry: AnnualPlanEntry): AnnualPlanEntry {
     topic: entry.topic,
     note: entry.note,
     completed: entry.completed,
+  };
+}
+
+function deepCloneWeeklyScheduleEntry(entry: WeeklyScheduleEntry): WeeklyScheduleEntry {
+  return {
+    ...entry,
+    id: entry.id,
+    classId: entry.classId,
+    weekday: entry.weekday,
+    lessonNumber: entry.lessonNumber,
   };
 }
 
@@ -343,6 +374,12 @@ export function migrateV0ToV1(raw: unknown): MigrationResult {
     }
   }
 
+  if (raw.weeklySchedule !== undefined && raw.weeklySchedule !== null) {
+    if (!isValidWeeklyScheduleList(raw.weeklySchedule)) {
+      return { status: "invalid_data", reason: "Invalid \x27weeklySchedule\x27 (must be array of valid entries with unique weekday/lesson slots) in legacy v0 data", raw };
+    }
+  }
+
   const result: AppData & { schemaVersion: 1 } = {
     ...raw,
     schemaVersion: 1,
@@ -351,6 +388,7 @@ export function migrateV0ToV1(raw: unknown): MigrationResult {
     ...(raw.workCalendar ? { workCalendar: deepCloneCalendar(raw.workCalendar as WorkCalendar) } : {}),
     ...(raw.annualPlanEntries ? { annualPlanEntries: (raw.annualPlanEntries as AnnualPlanEntry[]).map(deepCloneAnnualPlanEntry) } : {}),
     ...(raw.teacherEvaluations ? { teacherEvaluations: (raw.teacherEvaluations as TeacherEvaluation[]).map(deepCloneTeacherEvaluation) } : {}),
+    ...(raw.weeklySchedule ? { weeklySchedule: (raw.weeklySchedule as WeeklyScheduleEntry[]).map(deepCloneWeeklyScheduleEntry) } : {}),
   };
 
   return {
@@ -404,6 +442,11 @@ export function migrateData(raw: unknown): MigrationResult {
           return { status: "invalid_data", reason: "Invalid \x27teacherEvaluations\x27 in v1 data", raw };
         }
       }
+      if (raw.weeklySchedule !== undefined && raw.weeklySchedule !== null) {
+        if (!isValidWeeklyScheduleList(raw.weeklySchedule)) {
+          return { status: "invalid_data", reason: "Invalid \x27weeklySchedule\x27 in v1 data", raw };
+        }
+      }
 
       const result: AppData & { schemaVersion: 1 } = {
         ...raw,
@@ -413,6 +456,7 @@ export function migrateData(raw: unknown): MigrationResult {
         ...(raw.workCalendar ? { workCalendar: deepCloneCalendar(raw.workCalendar as WorkCalendar) } : {}),
         ...(raw.annualPlanEntries ? { annualPlanEntries: (raw.annualPlanEntries as AnnualPlanEntry[]).map(deepCloneAnnualPlanEntry) } : {}),
         ...(raw.teacherEvaluations ? { teacherEvaluations: (raw.teacherEvaluations as TeacherEvaluation[]).map(deepCloneTeacherEvaluation) } : {}),
+        ...(raw.weeklySchedule ? { weeklySchedule: (raw.weeklySchedule as WeeklyScheduleEntry[]).map(deepCloneWeeklyScheduleEntry) } : {}),
       };
 
       return {

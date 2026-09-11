@@ -29,6 +29,7 @@ export function removeClass(data: AppData, classId: string): AppData {
     sessions: data.sessions.filter((session) => session.classId !== classId),
     annualPlanEntries: data.annualPlanEntries?.filter((entry) => entry.classId !== classId),
     teacherEvaluations: data.teacherEvaluations?.filter((entry) => entry.classId !== classId),
+    weeklySchedule: data.weeklySchedule?.filter((entry) => entry.classId !== classId),
   };
 }
 
