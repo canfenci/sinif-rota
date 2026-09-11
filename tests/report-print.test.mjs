@@ -708,3 +708,30 @@ test("72. no PDF dependency, Blob, File, or share in print flow", () => {
   assert.ok(!/new Blob|new File\(|URL\.createObjectURL|navigator\.share|canShare/.test(printSource));
   assert.ok(!/new Blob|new File\(|URL\.createObjectURL|navigator\.share|canShare/.test(reportsViewSource));
 });
+
+test("73. class general checkbox exists exactly once", () => {
+  const matches = reportsViewSource.match(/Öğrenci listesini dahil et/g) ?? [];
+  assert.equal(matches.length, 1);
+});
+
+test("74. checkbox renders before the empty-state conditional", () => {
+  const checkboxIndex = reportsViewSource.indexOf("Öğrenci listesini dahil et");
+  const emptyIndex = reportsViewSource.indexOf("generalReport.totalControlSessionCount === 0 ? (");
+  assert.ok(checkboxIndex !== -1 && emptyIndex !== -1 && checkboxIndex < emptyIndex);
+});
+
+test("75. checkbox defaults to unchecked", () => {
+  assert.ok(reportsViewSource.includes("const [includeStudentSummary, setIncludeStudentSummary] = useState(false);"));
+});
+
+test("76. checkbox is wired to state without persistence", () => {
+  assert.ok(reportsViewSource.includes("checked={includeStudentSummary}"));
+  assert.ok(reportsViewSource.includes("onChange={(event) => setIncludeStudentSummary(event.target.checked)}"));
+  const flagLines = reportsViewSource.split("\n").filter((line) => line.includes("includeStudentSummary"));
+  assert.ok(!flagLines.some((line) => /localStorage|saveSafe|setItem/.test(line)));
+});
+
+test("77. class general print wiring is unchanged", () => {
+  assert.ok(reportsViewSource.includes("disabled={!generalReport || generalReport.totalControlSessionCount === 0}"));
+  assert.ok(reportsViewSource.includes("...(includeStudentSummary && comparisonReport"));
+});
