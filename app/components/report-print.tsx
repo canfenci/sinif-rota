@@ -134,6 +134,23 @@ export function toClassGeneralStudentSummaryRows(
   }));
 }
 
+/**
+ * Sınıf Genel print butonunun enable kuralı.
+ * Session varsa mevcut davranış; 0 session'da yalnız öğrenci özeti
+ * istenmişse ve basılacak aktif öğrenci varsa enable olur.
+ * Boş sınıf için PDF üretilmez.
+ */
+export function canPrintClassGeneralReport(options: {
+  hasReport: boolean;
+  totalControlSessionCount: number;
+  includeStudentSummary: boolean;
+  activeStudentCount: number;
+}): boolean {
+  if (!options.hasReport) return false;
+  if (options.totalControlSessionCount > 0) return true;
+  return options.includeStudentSummary && options.activeStudentCount > 0;
+}
+
 export function formatPrintTimestamp(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;

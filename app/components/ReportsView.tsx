@@ -38,6 +38,7 @@ import {
   buildClassComparisonPrintSnapshot,
   buildClassGeneralPrintSnapshot,
   buildStudentPrintSnapshot,
+  canPrintClassGeneralReport,
   ReportPrintJobView,
   toClassGeneralStudentSummaryRows,
   type ReportPrintJob,
@@ -1000,7 +1001,12 @@ export function ReportsView({
                             type="button"
                             className="secondary-action"
                             onClick={handlePrintClassGeneral}
-                            disabled={!generalReport || generalReport.totalControlSessionCount === 0}
+                            disabled={!canPrintClassGeneralReport({
+                              hasReport: !!generalReport,
+                              totalControlSessionCount: generalReport?.totalControlSessionCount ?? 0,
+                              includeStudentSummary,
+                              activeStudentCount: generalReport?.activeStudentCount ?? 0,
+                            })}
                             aria-label="Sınıf genel raporunu yazdır"
                           >
                             Yazdır / PDF

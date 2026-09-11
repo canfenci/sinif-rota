@@ -500,7 +500,7 @@ test("41. sessions tab has no print button", () => {
 test("42. print is disabled without meaningful data", () => {
   assert.ok(reportsViewSource.includes("disabled={!studentReport || (studentReport.totalValidCheckCount === 0 && studentReport.totalAbsentCount === 0)}"));
   assert.ok(reportsViewSource.includes("disabled={!comparisonReport || comparisonReport.rows.length === 0}"));
-  assert.ok(reportsViewSource.includes("disabled={!generalReport || generalReport.totalControlSessionCount === 0}"));
+  assert.ok(reportsViewSource.includes("disabled={!canPrintClassGeneralReport({"));
 });
 
 test("43. dirty teacher eval blocks print with a neutral warning", () => {
@@ -732,6 +732,116 @@ test("76. checkbox is wired to state without persistence", () => {
 });
 
 test("77. class general print wiring is unchanged", () => {
-  assert.ok(reportsViewSource.includes("disabled={!generalReport || generalReport.totalControlSessionCount === 0}"));
+  assert.ok(reportsViewSource.includes("disabled={!canPrintClassGeneralReport({"));
   assert.ok(reportsViewSource.includes("...(includeStudentSummary && comparisonReport"));
+  assert.ok(reportsViewSource.includes('requestPrint("class-general")'));
+});
+
+test("78. helper disables print on 0 sessions when summary is off", () => {
+  assert.equal(
+    printMod.canPrintClassGeneralReport({
+      hasReport: true,
+      totalControlSessionCount: 0,
+      includeStudentSummary: false,
+      activeStudentCount: 43,
+    }),
+    false
+  );
+});
+
+test("79. helper enables print on 0 sessions when summary is on with actives", () => {
+  assert.equal(
+    printMod.canPrintClassGeneralReport({
+      hasReport: true,
+      totalControlSessionCount: 0,
+      includeStudentSummary: true,
+      activeStudentCount: 43,
+    }),
+    true
+  );
+});
+
+test("80. helper disables print on 0 sessions with no active students", () => {
+  assert.equal(
+    printMod.canPrintClassGeneralReport({
+      hasReport: true,
+      totalControlSessionCount: 0,
+      includeStudentSummary: true,
+      activeStudentCount: 0,
+    }),
+    false
+  );
+});
+
+test("81. helper keeps existing behavior when sessions exist", () => {
+  assert.equal(
+    printMod.canPrintClassGeneralReport({
+      hasReport: true,
+      totalControlSessionCount: 5,
+      includeStudentSummary: false,
+      activeStudentCount: 2,
+    }),
+    true
+  );
+  assert.equal(
+    printMod.canPrintClassGeneralReport({
+      hasReport: false,
+      totalControlSessionCount: 5,
+      includeStudentSummary: true,
+      activeStudentCount: 2,
+    }),
+    false
+  );
+});
+
+test("82. zero-session rows map to summary with nulls preserved", () => {
+  const emptyRows = [
+    {
+      studentId: "s9",
+      studentNumber: 7,
+      studentName: "Zeynep Kaya",
+      active: true,
+      typeScores: { Ödev: null, Defter: null, Kitap: null, Materyal: null },
+      evaluatedCounts: { Ödev: 0, Defter: 0, Kitap: 0, Materyal: 0 },
+      suggestedParticipationScore: null,
+      coverageStatus: "insufficient",
+      sufficientData: false,
+    },
+  ];
+  const summary = printMod.toClassGeneralStudentSummaryRows(emptyRows);
+  assert.equal(summary.length, 1);
+  assert.equal(summary[0].studentName, "Zeynep Kaya");
+  assert.equal(summary[0].studentNumber, 7);
+  assert.deepEqual(summary[0].typeScores, { Ödev: null, Defter: null, Kitap: null, Materyal: null });
+  assert.equal(summary[0].suggestedParticipationScore, null);
+});
+
+test("83. zero-session snapshot carries class context and summary", () => {
+  const snap = printMod.buildClassGeneralPrintSnapshot({
+    className: "5-A",
+    rangeLabel: "Son 4 Hafta",
+    report: generalReport(),
+    recommendations: classRecommendations(),
+    evaluationText: null,
+    weekTitles: WEEK_TITLES,
+    includeStudentSummary: true,
+    studentSummary: printMod.toClassGeneralStudentSummaryRows(comparisonReport().rows),
+    generatedAt: GENERATED_AT,
+  });
+  assert.equal(snap.className, "5-A");
+  assert.equal(snap.rangeLabel, "Son 4 Hafta");
+  assert.equal(snap.studentSummary.length, 2);
+  assert.ok(JSON.stringify(snap).includes("Ali Veli"));
+});
+
+test("84. disabled prop delegates to the helper", () => {
+  assert.ok(reportsViewSource.includes("totalControlSessionCount: generalReport?.totalControlSessionCount ?? 0,"));
+  assert.ok(reportsViewSource.includes("activeStudentCount: generalReport?.activeStudentCount ?? 0,"));
+});
+
+test("85. dirty guard still blocks class general print", () => {
+  const handlerBlock = reportsViewSource.slice(reportsViewSource.indexOf("const handlePrintClassGeneral"));
+  assert.ok(handlerBlock.startsWith("const handlePrintClassGeneral = () => {\n    if (!generalReport"));
+  assert.ok(reportsViewSource.includes('requestPrint("class-general")'));
+  assert.ok(reportsViewSource.includes("if (evalDirtyRef.current) {"));
 });
